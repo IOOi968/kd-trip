@@ -22,8 +22,12 @@ export default function MainDashboard() {
   const [isAdding, setIsAdding] = useState(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem("kwan_dashboard_cards");
-    if (saved) setCards(JSON.parse(saved));
+    try {
+      const saved = localStorage.getItem("kwan_dashboard_cards");
+      if (saved) setCards(JSON.parse(saved));
+    } catch {
+      // 저장 데이터 파싱 실패 시 무시
+    }
   }, []);
 
   const saveCards = (next: CategoryCard[]) => {
@@ -100,7 +104,11 @@ export default function MainDashboard() {
           <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-md space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-bold text-stone-800">카테고리 선택</h2>
-              <button onClick={() => setIsAdding(false)} className="text-xs text-stone-400">
+              <button
+                type="button"
+                onClick={() => setIsAdding(false)}
+                className="text-xs text-stone-400"
+              >
                 닫기 ✕
               </button>
             </div>

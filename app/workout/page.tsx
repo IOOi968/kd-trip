@@ -12,20 +12,19 @@ export default function WorkoutPage() {
 
   return (
     <div className="min-h-screen bg-stone-50 text-stone-800 pb-20">
-      <div className="bg-stone-900 text-white px-4 py-2">
-        <div className="max-w-md mx-auto flex items-center justify-between text-xs">
-          <Link href="/" className="font-bold text-amber-300 hover:underline">
-            ← 메인 보드로
-          </Link>
-          <span className="text-stone-400">운동 카테고리</span>
-        </div>
-      </div>
-
-      <header className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-stone-200 px-4 pt-4 pb-3">
-        <div className="max-w-md mx-auto space-y-3">
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl font-extrabold text-stone-900">나의 운동 관리 💪</h1>
-            <span className="text-xs font-bold bg-sky-100 text-sky-700 px-2.5 py-1 rounded-full">
+      <header className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-stone-200 px-4 py-3.5">
+        <div className="max-w-md mx-auto space-y-3.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Link
+                href="/"
+                className="text-xs font-bold bg-stone-100 hover:bg-stone-200 text-stone-700 px-2.5 py-1.5 rounded-lg transition"
+              >
+                ← 홈
+              </Link>
+              <h1 className="text-base font-extrabold text-stone-900">나의 운동 관리 💪</h1>
+            </div>
+            <span className="text-[11px] font-bold bg-sky-100 text-sky-700 px-2.5 py-1 rounded-full">
               WORKOUT
             </span>
           </div>

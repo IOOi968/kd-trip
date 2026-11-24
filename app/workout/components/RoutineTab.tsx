@@ -46,6 +46,7 @@ export default function RoutineTab() {
   const [activeTitle, setActiveTitle] = useState("");
   const [timerKey, setTimerKey] = useState(0);
 
+  const [isEditingPresets, setIsEditingPresets] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [title, setTitle] = useState("");
@@ -57,7 +58,10 @@ export default function RoutineTab() {
 
   useEffect(() => {
     const loadPresets = async () => {
-      const { data } = await supabase.from("workout_presets").select("*").order("id", { ascending: true });
+      const { data } = await supabase
+        .from("workout_presets")
+        .select("*")
+        .order("id", { ascending: true });
       if (data) setPresets(data);
     };
     loadPresets();
@@ -256,13 +260,35 @@ export default function RoutineTab() {
               </button>
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={() => setShowForm(true)}
-              className="text-xs font-bold bg-stone-900 text-white px-3 py-1.5 rounded-lg"
-            >
-              + 추가
-            </button>
+            <div className="flex items-center gap-1.5">
+              {presets.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setIsEditingPresets((prev) => !prev)}
+                  className={`text-xs font-bold px-3 py-1.5 rounded-lg transition ${
+                    isEditingPresets
+                      ? "bg-emerald-100 text-emerald-700"
+                      : "bg-stone-100 hover:bg-stone-200 text-stone-700"
+                  }`}
+                >
+                  {isEditingPresets ? "완료" : "수정"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditingPresets(false);
+                  setEditId(null);
+                  setTitle("");
+                  setDraftItems([]);
+                  setExpandedDraftId(null);
+                  setShowForm(true);
+                }}
+                className="text-xs font-bold bg-stone-900 text-white px-3 py-1.5 rounded-lg"
+              >
+                + 추가
+              </button>
+            </div>
           )}
         </div>
 
@@ -402,13 +428,13 @@ export default function RoutineTab() {
         )}
 
         {presets.length > 0 && (
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-3 gap-2">
             {presets.map((preset) => {
               const isSelected = activePresetId === preset.id;
               return (
                 <div
                   key={preset.id}
-                  className={`flex items-stretch rounded-2xl shadow-sm overflow-hidden border transition ${
+                  className={`flex items-stretch rounded-xl shadow-sm overflow-hidden border transition min-w-0 ${
                     isSelected
                       ? "bg-emerald-700 text-white border-emerald-800 ring-2 ring-emerald-300"
                       : "bg-emerald-600 text-white border-emerald-700"
@@ -417,17 +443,24 @@ export default function RoutineTab() {
                   <button
                     type="button"
                     onClick={() => handleSelectPreset(preset)}
-                    className="flex-1 py-3.5 px-3.5 text-left font-extrabold text-sm hover:bg-emerald-700/80 transition"
+                    className="flex-1 py-2.5 px-2 text-center font-extrabold text-xs hover:bg-emerald-700/80 transition truncate"
+                    title={preset.title}
                   >
                     {preset.title}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => handleStartEdit(preset)}
-                    className="px-3 text-[11px] font-bold bg-emerald-800/40 hover:bg-emerald-800/70 text-emerald-50 border-l border-emerald-500/40"
-                  >
-                    수정
-                  </button>
+                  {isEditingPresets && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEditingPresets(false);
+                        handleStartEdit(preset);
+                      }}
+                      className="px-2 text-xs font-extrabold bg-emerald-800/50 hover:bg-emerald-800/80 text-white border-l border-emerald-500/40 shrink-0"
+                      aria-label={`${preset.title} 수정`}
+                    >
+                      ✓
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -527,7 +560,7 @@ export default function RoutineTab() {
         onClick={handleOunwan}
         className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-extrabold rounded-2xl shadow-md transition"
       >
-        🔥 오운완 🔥
+        💪 오운완 💪
       </button>
     </div>
   );
