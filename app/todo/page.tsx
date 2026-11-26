@@ -25,6 +25,7 @@ function getLocalTodayStr() {
 
 export default function TodoPage() {
   const [presets, setPresets] = useState<string[]>([]);
+  const [targetPreset, setTargetPreset] = useState<string>("일반");
   const [viewPreset, setViewPreset] = useState<string>("전체");
   const [newPresetName, setNewPresetName] = useState("");
   const [showAddPreset, setShowAddPreset] = useState(false);
@@ -68,7 +69,10 @@ export default function TodoPage() {
     const handleOutsideClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
       if (!target) return;
-      if (target.closest("[data-edit-box='true']") || target.closest("[data-edit-trigger='true']")) {
+      if (
+        target.closest("[data-edit-box='true']") ||
+        target.closest("[data-edit-trigger='true']")
+      ) {
         return;
       }
       setEditingId(null);
@@ -110,15 +114,21 @@ export default function TodoPage() {
   const handleDeletePreset = (presetToRemove: string) => {
     const next = presets.filter((p) => p !== presetToRemove);
     savePresets(next);
+    if (targetPreset === presetToRemove) {
+      setTargetPreset("일반");
+    }
     if (viewPreset === presetToRemove) {
       setViewPreset("전체");
     }
   };
 
-  // 내용에 프리셋 이름과 동일한 단어가 들어가면 자동 분류, 기본은 "일반"
-  const detectPresetFromText = (text: string) => {
-    const matched = presets.find((p) => p.trim() && text.includes(p.trim()));
-    return matched || "일반";
+  // 내용 안에 등록된 프리셋과 동일한 이름이 있으면 그 프리셋으로 결정, 없으면 사용자가 고른 프리셋(기본: 일반) 유지
+  const resolvePresetForItem = (text: string, chosenPreset: string) => {
+    const sortedPresets = [...presets]
+      .filter((p) => p.trim() && p !== "일반")
+      .sort((a, b) => b.length - a.length);
+    const matched = sortedPresets.find((p) => text.includes(p.trim()));
+    return matched || chosenPreset || "일반";
   };
 
   const handleAddItem = (e: React.FormEvent) => {
@@ -126,7 +136,7 @@ export default function TodoPage() {
     const trimmed = content.trim();
     if (!trimmed) return;
 
-    const assignedPreset = detectPresetFromText(trimmed);
+    const assignedPreset = resolvePresetForItem(trimmed, targetPreset);
     saveItems([
       {
         id: Date.now(),
@@ -141,7 +151,6 @@ export default function TodoPage() {
     setContent("");
   };
 
-  // '+ 항목으로 추가하기' 밑 AI 정리 버튼
   const handleAiOrganize = () => {
     const trimmed = content.trim();
     if (!trimmed || isAiLoading) return;
@@ -206,13 +215,13 @@ export default function TodoPage() {
     setEditingText("");
   };
 
-  const filterTabs = useMemo(() => {
-    const base = ["전체", "일반", ...presets.filter((p) => p !== "일반")];
+  const presetOptions = useMemo(() => {
+    const base = ["일반", ...presets.filter((p) => p !== "일반")];
     return Array.from(new Set(base));
   }, [presets]);
 
-  const presetOptionsForEdit = useMemo(() => {
-    const base = ["일반", ...presets.filter((p) => p !== "일반")];
+  const filterTabs = useMemo(() => {
+    const base = ["전체", "일반", ...presets.filter((p) => p !== "일반")];
     return Array.from(new Set(base));
   }, [presets]);
 
@@ -307,15 +316,20 @@ export default function TodoPage() {
             <div className="flex flex-wrap gap-1.5 min-w-0">
               {presets.map((preset) => {
                 const count = items.filter((i) => i.preset === preset).length;
+                const active = targetPreset === preset;
                 return (
                   <div
                     key={preset}
-                    className="inline-flex items-center rounded-xl text-xs font-bold border bg-stone-50 text-stone-700 border-stone-200 max-w-full overflow-hidden"
+                    className={`inline-flex items-center rounded-xl text-xs font-bold border transition max-w-full overflow-hidden ${
+                      active
+                        ? "bg-amber-100 text-amber-900 border-amber-300"
+                        : "bg-stone-50 text-stone-600 border-stone-200"
+                    }`}
                   >
                     <button
                       type="button"
-                      onClick={() => setViewPreset(preset)}
-                      className="px-3 py-1.5 break-all text-left hover:bg-stone-100 transition"
+                      onClick={() => setTargetPreset(preset)}
+                      className="px-3 py-1.5 break-all text-left hover:opacity-80"
                     >
                       {preset} ({count})
                     </button>
@@ -354,15 +368,26 @@ export default function TodoPage() {
           )}
         </section>
 
-        {/* 자유 입력 폼 + AI 버튼 */}
+        {/* 자유 입력 폼 (직접 프리셋 선택 가능 + 내용 일치 시 자동 지정) */}
         <form
           onSubmit={handleAddItem}
           className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-2.5 min-w-0"
         >
-          <div className="flex items-center justify-between gap-2 min-w-0">
-            <span className="text-xs font-bold text-stone-700">
-              자동 분류 (기본: 일반)
-            </span>
+          <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <span className="text-xs font-bold text-stone-800 shrink-0">프리셋:</span>
+              <select
+                value={targetPreset}
+                onChange={(e) => setTargetPreset(e.target.value)}
+                className="min-w-0 max-w-full px-2 py-1 text-xs font-bold border border-stone-200 rounded-lg bg-stone-50 text-stone-800 truncate"
+              >
+                {presetOptions.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </div>
             <input
               type="date"
               value={date}
@@ -489,7 +514,7 @@ export default function TodoPage() {
                             onChange={(e) => setEditingPreset(e.target.value)}
                             className="px-2 py-1 text-xs font-bold border border-stone-300 rounded-lg bg-white text-stone-800"
                           >
-                            {presetOptionsForEdit.map((p) => (
+                            {presetOptions.map((p) => (
                               <option key={p} value={p}>
                                 {p}
                               </option>
