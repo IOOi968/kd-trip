@@ -8,6 +8,14 @@ interface StudyLog {
   memo: string;
 }
 
+interface ToolCard {
+  id: string;
+  title: string;
+  desc: string;
+  icon: string;
+  color: string;
+}
+
 interface SubjectCard {
   id: string;
   name: string;
@@ -15,6 +23,13 @@ interface SubjectCard {
   href: string;
   color: string;
 }
+
+const AVAILABLE_TOOLS: ToolCard[] = [
+  { id: "quiz", title: "퀴즈", desc: "기출 · 개념 테스트", icon: "📝", color: "bg-emerald-50 border-emerald-200 text-emerald-900" },
+  { id: "saved", title: "저장", desc: "오답 · 핵심 요약집", icon: "🔖", color: "bg-sky-50 border-sky-200 text-sky-900" },
+  { id: "settings", title: "설정", desc: "학습 환경 · 알림 설정", icon: "⚙️", color: "bg-stone-100 border-stone-200 text-stone-800" },
+  { id: "planner", title: "스터디플래너", desc: "목표 · 학습 시간표", icon: "🗓️", color: "bg-indigo-50 border-indigo-200 text-indigo-900" },
+];
 
 const AVAILABLE_SUBJECTS: Omit<SubjectCard, "id">[] = [
   {
@@ -25,26 +40,20 @@ const AVAILABLE_SUBJECTS: Omit<SubjectCard, "id">[] = [
   },
 ];
 
-const QUICK_MENUS = [
-  { id: "quiz", title: "퀴즈", desc: "기출 · 개념 테스트", icon: "📝", color: "bg-emerald-50 border-emerald-200 text-emerald-900" },
-  { id: "saved", title: "저장", desc: "오답 · 핵심 요약집", icon: "🔖", color: "bg-sky-50 border-sky-200 text-sky-900" },
-  { id: "pending", title: "미정", desc: "추후 기능 확장", icon: "✨", color: "bg-stone-100 border-stone-200 text-stone-700" },
-  { id: "planner", title: "스터디플래너", desc: "목표 · 학습 시간표", icon: "🗓️", color: "bg-indigo-50 border-indigo-200 text-indigo-900" },
-];
-
 export default function StudyPage() {
-  // Next.js 16 빌드 통과를 위해 초기값은 정적으로 두고 useEffect에서 오늘 날짜 세팅
   const [todayStr, setTodayStr] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
   const [viewYear, setViewYear] = useState(2026);
   const [viewMonth, setViewMonth] = useState(10);
 
-  // 공부 전용 달력 데이터
+  // 공부 달력 데이터
   const [studyLogs, setStudyLogs] = useState<Record<string, StudyLog>>({});
   const [memoInput, setMemoInput] = useState("");
 
-  // 2x2 메뉴 선택 상태
-  const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  // 학습 도구 (+ 추가 방식: 퀴즈 / 저장 / 설정 / 스터디플래너)
+  const [tools, setTools] = useState<ToolCard[]>([]);
+  const [isAddingTool, setIsAddingTool] = useState(false);
+  const [activeTool, setActiveTool] = useState<string | null>(null);
 
   // 하단 공부 과목 카드 (+ 추가 방식)
   const [subjects, setSubjects] = useState<SubjectCard[]>([]);
@@ -68,6 +77,9 @@ export default function StudyPage() {
         setStudyLogs(parsed);
         if (parsed[tStr]) setMemoInput(parsed[tStr].memo || "");
       }
+
+      const savedTools = localStorage.getItem("kwan_study_tools_v1");
+      if (savedTools) setTools(JSON.parse(savedTools));
 
       const savedSubjects = localStorage.getItem("kwan_study_subjects_v1");
       if (savedSubjects) setSubjects(JSON.parse(savedSubjects));
@@ -110,7 +122,7 @@ export default function StudyPage() {
       ...studyLogs,
       [selectedDate]: {
         date: selectedDate,
-        memo: memoInput.trim() || "오늘 공부 완료 📚",
+        memo: memoInput.trim() || "공부 완료 📚",
       },
     };
     setStudyLogs(next);
@@ -126,6 +138,28 @@ export default function StudyPage() {
     localStorage.setItem("kwan_study_calendar_v1", JSON.stringify(next));
   };
 
+  // 학습 도구 추가/삭제
+  const saveTools = (next: ToolCard[]) => {
+    setTools(next);
+    localStorage.setItem("kwan_study_tools_v1", JSON.stringify(next));
+  };
+
+  const handleAddTool = (item: ToolCard) => {
+    if (tools.some((t) => t.id === item.id)) return;
+    saveTools([...tools, item]);
+    setIsAddingTool(false);
+  };
+
+  const handleDeleteTool = (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (confirm("이 학습 도구를 삭제할까요?")) {
+      saveTools(tools.filter((t) => t.id !== id));
+      if (activeTool === id) setActiveTool(null);
+    }
+  };
+
+  // 공부 과목 추가/삭제
   const saveSubjects = (next: SubjectCard[]) => {
     setSubjects(next);
     localStorage.setItem("kwan_study_subjects_v1", JSON.stringify(next));
@@ -160,7 +194,7 @@ export default function StudyPage() {
             >
               ← 홈
             </Link>
-            <h1 className="text-base font-extrabold text-stone-900">나의 공부 기록 📚</h1>
+            <h1 className="text-base font-extrabold text-stone-900">공부 📚</h1>
           </div>
           <span className="text-[11px] font-bold bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full">
             STUDY
@@ -245,11 +279,11 @@ export default function StudyPage() {
             })}
           </div>
 
-          {/* 선택한 날짜 공부 메모 */}
+          {/* 선택한 날짜 메모 */}
           <form onSubmit={handleSaveStudyLog} className="pt-2 border-t border-stone-100 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-extrabold text-stone-800">
-                📌 {selectedDate || "오늘"} 공부 기록
+                📌 {selectedDate || "오늘"}
               </span>
               {selectedDate && studyLogs[selectedDate] && (
                 <button
@@ -265,7 +299,7 @@ export default function StudyPage() {
             <div className="flex gap-2">
               <input
                 type="text"
-                placeholder="오늘 공부한 내용 한 줄 기록 (예: 전기자기학 2장 완료)"
+                placeholder="공부한 내용 한 줄 메모 (예: 전기자기학 2장 완료)"
                 value={memoInput}
                 onChange={(e) => setMemoInput(e.target.value)}
                 className="flex-1 px-3 py-2 text-xs border border-stone-200 rounded-xl bg-stone-50 focus:bg-white focus:outline-none"
@@ -280,34 +314,89 @@ export default function StudyPage() {
           </form>
         </section>
 
-        {/* 2. 2x2 직사각형 4개 메뉴 박스 (퀴즈 / 저장 / 미정 / 스터디플래너) */}
+        {/* 2. 학습 도구 (+ 추가 방식: 퀴즈 / 저장 / 설정 / 스터디플래너) */}
         <section className="space-y-2.5">
-          <h2 className="text-xs font-bold text-stone-600 px-1">학습 도구</h2>
+          <h2 className="text-xs font-bold text-stone-600 px-1">
+            학습 도구 ({tools.length}/4)
+          </h2>
+
           <div className="grid grid-cols-2 gap-2.5">
-            {QUICK_MENUS.map((menu) => (
-              <button
-                key={menu.id}
-                type="button"
-                onClick={() => setActiveMenu(activeMenu === menu.id ? null : menu.id)}
-                className={`h-20 rounded-2xl border px-4 py-3 flex items-center justify-between text-left shadow-xs hover:scale-[1.01] transition ${menu.color}`}
+            {tools.map((tool) => (
+              <div
+                key={tool.id}
+                onClick={() => setActiveTool(activeTool === tool.id ? null : tool.id)}
+                className={`relative h-20 rounded-2xl border px-4 py-3 flex items-center justify-between text-left shadow-xs hover:scale-[1.01] transition cursor-pointer ${tool.color}`}
               >
-                <div>
-                  <p className="text-sm font-extrabold">{menu.title}</p>
-                  <p className="text-[11px] opacity-75 mt-0.5">{menu.desc}</p>
+                <button
+                  type="button"
+                  onClick={(e) => handleDeleteTool(e, tool.id)}
+                  className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-white/80 text-[10px] text-stone-400 hover:text-rose-600 flex items-center justify-center"
+                  aria-label="삭제"
+                >
+                  ✕
+                </button>
+                <div className="pr-2">
+                  <p className="text-sm font-extrabold">{tool.title}</p>
+                  <p className="text-[11px] opacity-75 mt-0.5">{tool.desc}</p>
                 </div>
-                <span className="text-2xl">{menu.icon}</span>
-              </button>
+                <span className="text-2xl shrink-0">{tool.icon}</span>
+              </div>
             ))}
+
+            {tools.length < 4 && (
+              <button
+                type="button"
+                onClick={() => setIsAddingTool(true)}
+                className="h-20 rounded-2xl border-2 border-dashed border-stone-300 bg-white hover:bg-stone-100 flex flex-col items-center justify-center gap-0.5 text-stone-400 hover:text-stone-700 transition"
+              >
+                <span className="text-2xl font-light leading-none">+</span>
+                <span className="text-[11px] font-semibold">추가</span>
+              </button>
+            )}
           </div>
 
-          {activeMenu && (
+          {/* 학습 도구 + 추가 선택 창 */}
+          {isAddingTool && (
+            <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-md space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-stone-800">학습 도구 선택</h3>
+                <button
+                  type="button"
+                  onClick={() => setIsAddingTool(false)}
+                  className="text-xs text-stone-400"
+                >
+                  닫기 ✕
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                {AVAILABLE_TOOLS.map((item) => {
+                  const alreadyAdded = tools.some((t) => t.id === item.id);
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      disabled={alreadyAdded}
+                      onClick={() => handleAddTool(item)}
+                      className="py-3 px-3 rounded-xl border border-stone-200 bg-stone-50 hover:bg-stone-100 disabled:opacity-40 text-xs font-bold flex items-center gap-2 transition"
+                    >
+                      <span className="text-xl">{item.icon}</span>
+                      <span>{item.title}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {activeTool && (
             <div className="bg-white border border-stone-200 rounded-2xl p-3.5 text-xs text-stone-600 flex items-center justify-between shadow-xs">
               <span>
-                <strong>{QUICK_MENUS.find((m) => m.id === activeMenu)?.title}</strong> 기능은 준비 중입니다! 원하시는 구성을 말씀해 주시면 바로 연결해 드릴게요.
+                <strong>{tools.find((m) => m.id === activeTool)?.title}</strong> 기능은 준비 중입니다! 원하시는 구성을 말씀해 주시면 바로 연결해 드릴게요.
               </span>
               <button
                 type="button"
-                onClick={() => setActiveMenu(null)}
+                onClick={() => setActiveTool(null)}
                 className="text-stone-400 font-bold ml-2"
               >
                 ✕
