@@ -2,7 +2,17 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { DayTimeRecord, getStudyDateAndSlot, loadTimeRecords } from "../../utils/studyTime";
+import {
+  DayTimeRecord,
+  TimeRange,
+  getStudyDateAndOffset,
+  hmsToOffsetSec,
+  offsetSecToHms,
+  calcMergedSeconds,
+  getSlotFillPercent,
+  loadTimeRecords,
+  saveTimeRecords,
+} from "../../utils/studyTime";
 
 interface PlannerLine {
   done: boolean;
@@ -11,10 +21,9 @@ interface PlannerLine {
 
 interface DaySheet {
   goal: string;
-  lines: PlannerLine[]; // 24줄 (사진 속 24행과 1:1 매칭)
+  lines: PlannerLine[];
 }
 
-// 사진 속 5 ~ 12 ~ 4 순서 (24시간)
 const HOURS_ORDER = [
   { hour: 5, label: "5" }, { hour: 6, label: "6" }, { hour: 7, label: "7" },
   { hour: 8, label: "8" }, { hour: 9, label: "9" }, { hour: 10, label: "10" },
@@ -28,13 +37,27 @@ const HOURS_ORDER = [
 
 const EMPTY_LINES: PlannerLine[] = Array.from({ length: 24 }, () => ({ done: false, text: "" }));
 
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
 export default function StudyPlannerPage() {
   const [selectedDate, setSelectedDate] = useState("");
   const [sheets, setSheets] = useState<Record<string, DaySheet>>({});
   const [timeRecords, setTimeRecords] = useState<Record<string, DayTimeRecord>>({});
 
+  // 시간 설정 모달 상태 (뒷배경 어둡게 + 시/분/초 - 시/분/초 입력)
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingRangeId, setEditingRangeId] = useState<string | null>(null);
+  const [startH, setStartH] = useState("9");
+  const [startM, setStartM] = useState("0");
+  const [startS, setStartS] = useState("0");
+  const [endH, setEndH] = useState("10");
+  const [endM, setEndM] = useState("0");
+  const [endS, setEndS] = useState("0");
+
   useEffect(() => {
-    const { dStr } = getStudyDateAndSlot(new Date());
+    const { dStr } = getStudyDateAndOffset(new Date());
     setSelectedDate(dStr);
 
     try {
@@ -53,7 +76,7 @@ export default function StudyPlannerPage() {
 
   const currentTime: DayTimeRecord = timeRecords[selectedDate] || {
     seconds: 0,
-    slots: [],
+    ranges: [],
   };
 
   const saveSheet = (nextSheet: DaySheet) => {
@@ -69,21 +92,99 @@ export default function StudyPlannerPage() {
     saveSheet({ ...currentSheet, lines: nextLines });
   };
 
-  // 네모칸 터치 시 수동 칠하기/해제 토글
-  const toggleSlot = (slotKey: string) => {
+  // 타임테이블 칸 클릭 시 시간 설정 박스 열기 (이미 해당 칸에 기록이 있으면 수정 모드로 열림)
+  const handleOpenTimeModal = (hour: number, slotIdx: number) => {
+    const slotStart = hmsToOffsetSec(hour, slotIdx * 10, 0);
+    const slotEnd = slotStart + 600;
+
+    const existingRange = currentTime.ranges.find((r) => {
+      const s = Math.min(r.startSec, r.endSec);
+      const e = Math.max(r.startSec, r.endSec);
+      return e > slotStart && s < slotEnd;
+    });
+
+    if (existingRange) {
+      const sHms = offsetSecToHms(existingRange.startSec);
+      const eHms = offsetSecToHms(existingRange.endSec);
+      setEditingRangeId(existingRange.id);
+      setStartH(String(sHms.h));
+      setStartM(String(sHms.m));
+      setStartS(String(sHms.s));
+      setEndH(String(eHms.h));
+      setEndM(String(eHms.m));
+      setEndS(String(eHms.s));
+    } else {
+      const nextHour = slotIdx === 5 ? (hour + 1) % 24 : hour;
+      const nextMin = slotIdx === 5 ? 0 : (slotIdx + 1) * 10;
+      setEditingRangeId(null);
+      setStartH(String(hour));
+      setStartM(String(slotIdx * 10));
+      setStartS("0");
+      setEndH(String(nextHour));
+      setEndM(String(nextMin));
+      setEndS("0");
+    }
+    setIsModalOpen(true);
+  };
+
+  // 입력한 시·분·초 - 시·분·초 구간 저장 및 반영
+  const handleApplyTimeRange = (e: React.FormEvent) => {
+    e.preventDefault();
     if (!selectedDate) return;
-    const exists = currentTime.slots.includes(slotKey);
-    const nextSlots = exists
-      ? currentTime.slots.filter((s) => s !== slotKey)
-      : [...currentTime.slots, slotKey];
-    const nextSec = Math.max(0, currentTime.seconds + (exists ? -600 : 600));
+
+    const sSec = hmsToOffsetSec(
+      Math.max(0, Math.min(23, Number(startH) || 0)),
+      Math.max(0, Math.min(59, Number(startM) || 0)),
+      Math.max(0, Math.min(59, Number(startS) || 0))
+    );
+    const eSec = hmsToOffsetSec(
+      Math.max(0, Math.min(23, Number(endH) || 0)),
+      Math.max(0, Math.min(59, Number(endM) || 0)),
+      Math.max(0, Math.min(59, Number(endS) || 0))
+    );
+
+    if (eSec <= sSec) {
+      alert("종료 시간은 시작 시간보다 뒤여야 합니다. (기준: 오전 5시 ~ 새벽 4시 59분)");
+      return;
+    }
+
+    let nextRanges: TimeRange[];
+    if (editingRangeId) {
+      nextRanges = currentTime.ranges.map((r) =>
+        r.id === editingRangeId ? { ...r, startSec: sSec, endSec: eSec } : r
+      );
+    } else {
+      nextRanges = [
+        ...currentTime.ranges,
+        { id: String(Date.now()), startSec: sSec, endSec: eSec },
+      ];
+    }
 
     const nextRecords = {
       ...timeRecords,
-      [selectedDate]: { seconds: nextSec, slots: nextSlots },
+      [selectedDate]: {
+        seconds: calcMergedSeconds(nextRanges),
+        ranges: nextRanges,
+      },
     };
     setTimeRecords(nextRecords);
-    localStorage.setItem("kwan_study_time_v1", JSON.stringify(nextRecords));
+    saveTimeRecords(nextRecords);
+    setIsModalOpen(false);
+  };
+
+  // 기존 구간 삭제
+  const handleDeleteRange = (id: string) => {
+    const nextRanges = currentTime.ranges.filter((r) => r.id !== id);
+    const nextRecords = {
+      ...timeRecords,
+      [selectedDate]: {
+        seconds: calcMergedSeconds(nextRanges),
+        ranges: nextRanges,
+      },
+    };
+    setTimeRecords(nextRecords);
+    saveTimeRecords(nextRecords);
+    if (editingRangeId === id) setIsModalOpen(false);
   };
 
   const totalH = Math.floor(currentTime.seconds / 3600);
@@ -94,7 +195,10 @@ export default function StudyPlannerPage() {
       <header className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-stone-200 px-4 py-3.5">
         <div className="max-w-md mx-auto flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Link href="/study" className="text-xs font-bold bg-stone-100 text-stone-700 px-2.5 py-1.5 rounded-lg">
+            <Link
+              href="/study"
+              className="text-xs font-bold bg-stone-100 text-stone-700 px-2.5 py-1.5 rounded-lg"
+            >
               ← 공부
             </Link>
             <h1 className="text-base font-extrabold text-stone-900">스터디플래너 🗓️</h1>
@@ -106,7 +210,6 @@ export default function StudyPlannerPage() {
       </header>
 
       <main className="max-w-md mx-auto px-3 pt-4">
-        {/* 사진 속 종이 플래너 시트 그대로 재현 */}
         <div className="bg-white border border-stone-300 rounded-xl shadow-xs overflow-hidden">
           {/* 상단 goal 줄 & 날짜 선택 */}
           <div className="flex items-center justify-between px-3 py-2.5 border-b-2 border-stone-400">
@@ -128,13 +231,12 @@ export default function StudyPlannerPage() {
             />
           </div>
 
-          {/* 24줄 본문: 왼쪽(넓은 할일 줄글 칸) + 오른쪽(5~4 정사각형 6칸 타임테이블) */}
+          {/* 24줄 본문: 왼쪽 할일 줄 + 오른쪽 타임테이블 (왼쪽 -> 오른쪽 게이지 차오름) */}
           <div className="divide-y divide-stone-300">
             {HOURS_ORDER.map((item, idx) => {
               const line = currentSheet.lines[idx] || { done: false, text: "" };
               return (
                 <div key={item.hour} className="grid grid-cols-12 items-stretch min-h-[26px]">
-                  {/* 왼쪽 넓은 할일 줄 칸 (체크박스 + 세로선 + 점선 구분선 구조) */}
                   <div className="col-span-7 flex items-center border-r border-stone-400">
                     <div className="w-7 h-full flex items-center justify-center border-r border-stone-300 shrink-0">
                       <input
@@ -154,24 +256,35 @@ export default function StudyPlannerPage() {
                     />
                   </div>
 
-                  {/* 오른쪽 타임테이블: 시간 숫자(5~4) + 6개 정사각형 네모칸 */}
+                  {/* 오른쪽 타임테이블: 각 10분 칸 내부가 왼쪽에서 오른쪽으로 차오름 */}
                   <div className="col-span-5 grid grid-cols-7 items-stretch">
                     <span className="flex items-center justify-center text-[10px] font-bold text-stone-600 bg-stone-50 border-r border-stone-300">
                       {item.label}
                     </span>
                     <div className="col-span-6 grid grid-cols-6 divide-x divide-stone-200">
                       {[0, 1, 2, 3, 4, 5].map((slotIdx) => {
-                        const slotKey = `${item.hour}-${slotIdx}`;
-                        const filled = currentTime.slots.includes(slotKey);
+                        const slotStart = hmsToOffsetSec(item.hour, slotIdx * 10, 0);
+                        const slotEnd = slotStart + 600;
+                        const fillPct = getSlotFillPercent(
+                          currentTime.ranges,
+                          slotStart,
+                          slotEnd
+                        );
+
                         return (
                           <button
-                            key={slotKey}
+                            key={slotIdx}
                             type="button"
-                            onClick={() => toggleSlot(slotKey)}
-                            className={`w-full h-full min-h-[24px] transition ${
-                              filled ? "bg-emerald-500" : "bg-white hover:bg-emerald-50"
-                            }`}
-                          />
+                            onClick={() => handleOpenTimeModal(item.hour, slotIdx)}
+                            className="relative w-full h-full min-h-[24px] bg-white hover:bg-emerald-50/70 overflow-hidden"
+                          >
+                            {fillPct > 0 && (
+                              <span
+                                style={{ width: `${fillPct}%` }}
+                                className="absolute top-0 bottom-0 left-0 bg-emerald-500 transition-all duration-300 pointer-events-none"
+                              />
+                            )}
+                          </button>
                         );
                       })}
                     </div>
@@ -181,11 +294,11 @@ export default function StudyPlannerPage() {
             })}
           </div>
 
-          {/* 맨 아래 total __ h __ m 집계 칸 (사진 하단 양식 그대로) */}
+          {/* 맨 아래 total __ h __ m 집계 칸 */}
           <div className="grid grid-cols-12 border-t-2 border-stone-400 bg-stone-50/60">
             <div className="col-span-7 border-r border-stone-400 px-3 py-3 flex items-center">
               <span className="text-[10px] text-stone-400">
-                뽀모도로 · 공부타이머 시간이 자동 색칠됩니다
+                격자 칸을 누르면 시간을 직접 입력·수정할 수 있어요
               </span>
             </div>
             <div className="col-span-5 px-3 py-2.5 flex flex-col justify-between">
@@ -194,7 +307,7 @@ export default function StudyPlannerPage() {
                 <span className="text-base font-extrabold text-emerald-700">{totalH}</span>
                 <span className="text-xs font-bold text-stone-600">h</span>
                 <span className="text-base font-extrabold text-emerald-700">
-                  {String(totalM).padStart(2, "0")}
+                  {pad2(totalM)}
                 </span>
                 <span className="text-xs font-bold text-stone-600">m</span>
               </div>
@@ -202,6 +315,164 @@ export default function StudyPlannerPage() {
           </div>
         </div>
       </main>
+
+      {/* 격자 클릭 시 뒷배경 어둡게 + 시·분·초 - 시·분·초 시간 설정 박스 */}
+      {isModalOpen && (
+        <div
+          onClick={() => setIsModalOpen(false)}
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[1px] flex items-center justify-center p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm bg-white border border-stone-200 rounded-2xl p-5 shadow-xl space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-extrabold text-stone-900">
+                ⏱️ {editingRangeId ? "공부 시간 구간 수정" : "공부 시간 직접 입력"}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="text-xs text-stone-400 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleApplyTimeRange} className="space-y-3.5">
+              {/* 시작 시간: 시 분 초 */}
+              <div className="bg-stone-50 border border-stone-200 rounded-xl p-3 space-y-1.5">
+                <span className="block text-[11px] font-bold text-stone-500">시작 시간</span>
+                <div className="grid grid-cols-3 gap-1.5 items-center">
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min={0}
+                      max={23}
+                      value={startH}
+                      onChange={(e) => setStartH(e.target.value)}
+                      className="w-full bg-white border border-stone-300 rounded-lg py-1.5 text-xs font-extrabold text-center"
+                    />
+                    <span className="text-[11px] font-bold text-stone-600">시</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min={0}
+                      max={59}
+                      value={startM}
+                      onChange={(e) => setStartM(e.target.value)}
+                      className="w-full bg-white border border-stone-300 rounded-lg py-1.5 text-xs font-extrabold text-center"
+                    />
+                    <span className="text-[11px] font-bold text-stone-600">분</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min={0}
+                      max={59}
+                      value={startS}
+                      onChange={(e) => setStartS(e.target.value)}
+                      className="w-full bg-white border border-stone-300 rounded-lg py-1.5 text-xs font-extrabold text-center"
+                    />
+                    <span className="text-[11px] font-bold text-stone-600">초</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-center text-xs font-extrabold text-stone-400">~</div>
+
+              {/* 종료 시간: 시 분 초 */}
+              <div className="bg-stone-50 border border-stone-200 rounded-xl p-3 space-y-1.5">
+                <span className="block text-[11px] font-bold text-stone-500">종료 시간</span>
+                <div className="grid grid-cols-3 gap-1.5 items-center">
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min={0}
+                      max={23}
+                      value={endH}
+                      onChange={(e) => setEndH(e.target.value)}
+                      className="w-full bg-white border border-stone-300 rounded-lg py-1.5 text-xs font-extrabold text-center"
+                    />
+                    <span className="text-[11px] font-bold text-stone-600">시</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min={0}
+                      max={59}
+                      value={endM}
+                      onChange={(e) => setEndM(e.target.value)}
+                      className="w-full bg-white border border-stone-300 rounded-lg py-1.5 text-xs font-extrabold text-center"
+                    />
+                    <span className="text-[11px] font-bold text-stone-600">분</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min={0}
+                      max={59}
+                      value={endS}
+                      onChange={(e) => setEndS(e.target.value)}
+                      className="w-full bg-white border border-stone-300 rounded-lg py-1.5 text-xs font-extrabold text-center"
+                    />
+                    <span className="text-[11px] font-bold text-stone-600">초</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                {editingRangeId && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteRange(editingRangeId)}
+                    className="px-3.5 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-xs font-extrabold rounded-xl"
+                  >
+                    구간 삭제
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl transition"
+                >
+                  스터디플래너에 적용하기
+                </button>
+              </div>
+            </form>
+
+            {/* 오늘 기록된 전체 시간 구간 리스트 (한눈에 확인 & 삭제) */}
+            {currentTime.ranges.length > 0 && (
+              <div className="pt-2 border-t border-stone-100 space-y-1.5">
+                <p className="text-[11px] font-bold text-stone-500">오늘 기록된 시간 구간</p>
+                <div className="max-h-28 overflow-y-auto space-y-1">
+                  {currentTime.ranges.map((r) => {
+                    const s = offsetSecToHms(r.startSec);
+                    const e = offsetSecToHms(r.endSec);
+                    return (
+                      <div
+                        key={r.id}
+                        className="flex items-center justify-between text-[11px] bg-stone-50 px-2.5 py-1.5 rounded-lg border border-stone-200"
+                      >
+                        <span className="font-bold text-stone-700">
+                          {pad2(s.h)}:{pad2(s.m)}:{pad2(s.s)} ~ {pad2(e.h)}:{pad2(e.m)}:{pad2(e.s)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteRange(r.id)}
+                          className="text-rose-500 font-bold"
+                        >
+                          삭제
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
