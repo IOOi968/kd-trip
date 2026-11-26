@@ -34,7 +34,6 @@ export default function TodoPage() {
   const [items, setItems] = useState<IdeaItem[]>([]);
   const [content, setContent] = useState("");
   const [date, setDate] = useState("");
-  const [isAiLoading, setIsAiLoading] = useState(false);
 
   // 수정 상태 (항목 내용 + 프리셋 변경)
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -122,13 +121,36 @@ export default function TodoPage() {
     }
   };
 
-  // 내용 안에 등록된 프리셋과 동일한 이름이 있으면 그 프리셋으로 결정, 없으면 사용자가 고른 프리셋(기본: 일반) 유지
-  const resolvePresetForItem = (text: string, chosenPreset: string) => {
+  // 내용에 등록된 프리셋과 동일한 단어가 있으면 자동 분류하고, 맨 앞에 붙은 프리셋 문구는 제거
+  const resolvePresetAndContent = (rawText: string, chosenPreset: string) => {
     const sortedPresets = [...presets]
-      .filter((p) => p.trim() && p !== "일반")
+      .map((p) => p.trim())
+      .filter((p) => p && p !== "일반")
       .sort((a, b) => b.length - a.length);
-    const matched = sortedPresets.find((p) => text.includes(p.trim()));
-    return matched || chosenPreset || "일반";
+
+    // 1) 맨 앞에 프리셋 이름이 붙은 경우 (예: "운동/ 홈페이지 만들기" -> preset: "운동/", content: "홈페이지 만들기")
+    const prefixMatch = sortedPresets.find((p) => rawText.startsWith(p));
+    if (prefixMatch) {
+      const stripped = rawText.slice(prefixMatch.length).trim();
+      return {
+        preset: prefixMatch,
+        cleanedContent: stripped || rawText,
+      };
+    }
+
+    // 2) 내용 중간에 프리셋 이름과 동일한 단어가 포함된 경우
+    const anywhereMatch = sortedPresets.find((p) => rawText.includes(p));
+    if (anywhereMatch) {
+      return {
+        preset: anywhereMatch,
+        cleanedContent: rawText,
+      };
+    }
+
+    return {
+      preset: chosenPreset || "일반",
+      cleanedContent: rawText,
+    };
   };
 
   const handleAddItem = (e: React.FormEvent) => {
@@ -136,12 +158,16 @@ export default function TodoPage() {
     const trimmed = content.trim();
     if (!trimmed) return;
 
-    const assignedPreset = resolvePresetForItem(trimmed, targetPreset);
+    const { preset: assignedPreset, cleanedContent } = resolvePresetAndContent(
+      trimmed,
+      targetPreset
+    );
+
     saveItems([
       {
         id: Date.now(),
         preset: assignedPreset,
-        content: trimmed,
+        content: cleanedContent,
         date: date || getLocalTodayStr(),
         done: false,
         highlighted: false,
@@ -149,25 +175,6 @@ export default function TodoPage() {
       ...items,
     ]);
     setContent("");
-  };
-
-  const handleAiOrganize = () => {
-    const trimmed = content.trim();
-    if (!trimmed || isAiLoading) return;
-    setIsAiLoading(true);
-
-    const lines = trimmed
-      .split(/\n+/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-
-    const organized =
-      lines.length > 1
-        ? lines.map((line) => (line.startsWith("• ") ? line : `• ${line}`)).join("\n")
-        : trimmed;
-
-    setContent(organized);
-    setIsAiLoading(false);
   };
 
   const toggleItemDone = (id: number) => {
@@ -368,7 +375,7 @@ export default function TodoPage() {
           )}
         </section>
 
-        {/* 자유 입력 폼 (직접 프리셋 선택 가능 + 내용 일치 시 자동 지정) */}
+        {/* 자유 입력 폼 */}
         <form
           onSubmit={handleAddItem}
           className="bg-white border border-stone-200 rounded-2xl p-4 shadow-xs space-y-2.5 min-w-0"
@@ -410,15 +417,6 @@ export default function TodoPage() {
             className="w-full py-2.5 bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold rounded-xl transition"
           >
             + 항목으로 추가하기
-          </button>
-
-          <button
-            type="button"
-            onClick={handleAiOrganize}
-            disabled={isAiLoading}
-            className="w-full py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-xs font-bold rounded-xl transition"
-          >
-            {isAiLoading ? "AI 정리 중..." : "AI"}
           </button>
         </form>
 
