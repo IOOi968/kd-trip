@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { addOneStudySecond } from "../../utils/studyTime";
+import { addOneStudySecond } from "../utils/studyTime";
 
 interface Props {
   onTick?: () => void;
