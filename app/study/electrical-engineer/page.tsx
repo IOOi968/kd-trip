@@ -2,21 +2,22 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import ShortAnswerBox from "../components/ShortAnswerBox";
 
 interface AttemptRecord {
   id: number;
   attemptNo: number;
   date: string;
-  correctScore: string; // 맞춘 점수
-  shortAnswerScore: string; // 단답 점수
-  wrongScore: string; // 틀린 점수
-  unsolvedScore: string; // 어려운 문제
-  wrongNumbers: number[]; // 틀린 번호 목록
-  repeatedWrongNumbers: number[]; // 이전 풀이에서 틀렸는데 또 틀린 번호
+  correctScore: string;
+  shortAnswerScore: string;
+  wrongScore: string;
+  unsolvedScore: string;
+  wrongNumbers: number[];
+  repeatedWrongNumbers: number[];
 }
 
 interface ExamGroup {
-  examName: string; // 예: "2026-1"
+  examName: string;
   attempts: AttemptRecord[];
 }
 
@@ -30,7 +31,6 @@ function parseNumbers(input: string): number[] {
   return Array.from(new Set(nums)).sort((a, b) => a - b);
 }
 
-// 연도 내림차순(2026 -> 2025), 같은 연도 내 회차 오름차순(1 -> 2 -> 3) 정렬 함수
 function sortExamGroups(groups: ExamGroup[]): ExamGroup[] {
   return [...groups].sort((a, b) => {
     const matchA = a.examName.match(/^(\d{4})\D*(\d+)?/);
@@ -39,11 +39,11 @@ function sortExamGroups(groups: ExamGroup[]): ExamGroup[] {
     if (matchA && matchB) {
       const yearA = Number(matchA[1]);
       const yearB = Number(matchB[1]);
-      if (yearA !== yearB) return yearB - yearA; // 최신 연도 우선
+      if (yearA !== yearB) return yearB - yearA;
 
       const roundA = matchA[2] ? Number(matchA[2]) : 0;
       const roundB = matchB[2] ? Number(matchB[2]) : 0;
-      if (roundA !== roundB) return roundA - roundB; // 1, 2, 3 오름차순
+      if (roundA !== roundB) return roundA - roundB;
     }
     return b.examName.localeCompare(a.examName, "ko", { numeric: true });
   });
@@ -54,7 +54,10 @@ export default function ElectricalEngineerPage() {
   const [examGroups, setExamGroups] = useState<ExamGroup[]>([]);
   const [openExams, setOpenExams] = useState<Record<string, boolean>>({});
 
-  // 입력 폼 상태
+  // 3개 메인 섹션 아코디언 토글 상태 (기본 접힘 -> 삼각형 눌러서 열고 닫기)
+  const [isScoreBoxOpen, setIsScoreBoxOpen] = useState(false);
+  const [isHistoryBoxOpen, setIsHistoryBoxOpen] = useState(false);
+
   const [examName, setExamName] = useState("");
   const [correctScore, setCorrectScore] = useState("");
   const [shortAnswerScore, setShortAnswerScore] = useState("");
@@ -136,6 +139,7 @@ export default function ElectricalEngineerPage() {
     }
 
     saveGroups(nextGroups);
+    setIsHistoryBoxOpen(true);
     setOpenExams((prev) => ({ ...prev, [normalizedName]: true }));
 
     setCorrectScore("");
@@ -194,293 +198,313 @@ export default function ElectricalEngineerPage() {
             </Link>
             <h1 className="text-base font-extrabold text-stone-900">전기기사 ⚡</h1>
           </div>
-          <span className="text-[11px] font-bold bg-amber-100 text-amber-900 px-2.5 py-1 rounded-full">
-            누적 {examGroups.length}회차
+          <span className="text-[11px] font-bold bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full">
+            STUDY
           </span>
         </div>
       </header>
 
-      <main className="max-w-md mx-auto px-4 pt-5 space-y-6">
-        {/* 1. 시험 이름 / 점수 4종 / 틀린 번호 입력 & 저장 박스 */}
-        <form
-          onSubmit={handleSaveAttempt}
-          className="bg-white border border-stone-200 rounded-2xl p-4 shadow-sm space-y-3.5"
-        >
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-extrabold text-stone-900">📝 기출 회차 점수 · 오답 기록</h2>
-            {existingGroup && (
+      <main className="max-w-md mx-auto px-4 pt-5 space-y-4">
+        {/* 1. 기출 회차 점수 · 오답 기록 박스 (기존 디자인 그대로 + 삼각형 열고 닫기) */}
+        <section className="bg-white border border-stone-200 rounded-2xl p-4 shadow-sm space-y-3.5">
+          <div
+            onClick={() => setIsScoreBoxOpen(!isScoreBoxOpen)}
+            className="flex items-center justify-between cursor-pointer select-none"
+          >
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-extrabold text-stone-900">📝 기출 회차 점수 · 오답 기록</h2>
+              <span className="text-xs font-extrabold text-amber-600">
+                {isScoreBoxOpen ? "▼" : "▶"}
+              </span>
+            </div>
+            {existingGroup && isScoreBoxOpen && (
               <span className="text-[11px] font-bold bg-sky-100 text-sky-800 px-2.5 py-0.5 rounded-full">
                 {existingGroup.attempts.length + 1}회차 입력 중
               </span>
             )}
           </div>
 
-          {/* 시험 이름 입력 박스 */}
-          <div className="space-y-1">
-            <label className="block text-[11px] font-bold text-stone-600">시험 이름</label>
-            <input
-              type="text"
-              placeholder="ex) 2026-1"
-              value={examName}
-              onChange={(e) => setExamName(e.target.value)}
-              className="w-full px-3 py-2 text-xs font-extrabold border border-stone-200 rounded-xl bg-stone-50 focus:bg-white focus:outline-none"
-              required
-            />
-          </div>
-
-          {/* 점수 넣는 박스 (맞춘 점수: 초록 / 단답 점수: 검정 / 틀린 점수: 파랑 / 어려운 문제: 빨강) */}
-          <div className="space-y-1">
-            <label className="block text-[11px] font-bold text-stone-600">점수 기록</label>
-            <div className="grid grid-cols-4 gap-1.5">
-              <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-2">
-                <span className="block text-[10px] font-bold text-emerald-800 mb-1">맞춘 점수</span>
+          {isScoreBoxOpen && (
+            <form onSubmit={handleSaveAttempt} className="space-y-3.5 pt-1">
+              {/* 시험 이름 입력 박스 */}
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-stone-600">시험 이름</label>
                 <input
-                  type="number"
-                  placeholder="0"
-                  value={correctScore}
-                  onChange={(e) => setCorrectScore(e.target.value)}
-                  className="w-full bg-white border border-emerald-200 rounded-lg px-2 py-1 text-xs font-extrabold text-center text-emerald-700 focus:outline-none"
+                  type="text"
+                  placeholder="ex) 2026-1"
+                  value={examName}
+                  onChange={(e) => setExamName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs font-extrabold border border-stone-200 rounded-xl bg-stone-50 focus:bg-white focus:outline-none"
+                  required
                 />
               </div>
 
-              <div className="bg-stone-100 border border-stone-200 rounded-xl p-2">
-                <span className="block text-[10px] font-bold text-stone-800 mb-1">단답 점수</span>
-                <input
-                  type="number"
-                  placeholder="0"
-                  value={shortAnswerScore}
-                  onChange={(e) => setShortAnswerScore(e.target.value)}
-                  className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs font-extrabold text-center text-stone-900 focus:outline-none"
-                />
+              {/* 점수 넣는 박스 */}
+              <div className="space-y-1">
+                <label className="block text-[11px] font-bold text-stone-600">점수 기록</label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-2">
+                    <span className="block text-[10px] font-bold text-emerald-800 mb-1">맞춘 점수</span>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      value={correctScore}
+                      onChange={(e) => setCorrectScore(e.target.value)}
+                      className="w-full bg-white border border-emerald-200 rounded-lg px-2 py-1 text-xs font-extrabold text-center text-emerald-700 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="bg-stone-100 border border-stone-200 rounded-xl p-2">
+                    <span className="block text-[10px] font-bold text-stone-800 mb-1">단답 점수</span>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      value={shortAnswerScore}
+                      onChange={(e) => setShortAnswerScore(e.target.value)}
+                      className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs font-extrabold text-center text-stone-900 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="bg-sky-50/70 border border-sky-200 rounded-xl p-2">
+                    <span className="block text-[10px] font-bold text-sky-800 mb-1">틀린 점수</span>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      value={wrongScore}
+                      onChange={(e) => setWrongScore(e.target.value)}
+                      className="w-full bg-white border border-sky-200 rounded-lg px-2 py-1 text-xs font-extrabold text-center text-sky-600 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="bg-rose-50/70 border border-rose-200 rounded-xl p-2">
+                    <span className="block text-[10px] font-bold text-rose-800 mb-1">어려운 문제</span>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      value={unsolvedScore}
+                      onChange={(e) => setUnsolvedScore(e.target.value)}
+                      className="w-full bg-white border border-rose-200 rounded-lg px-2 py-1 text-xs font-extrabold text-center text-rose-600 focus:outline-none"
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div className="bg-sky-50/70 border border-sky-200 rounded-xl p-2">
-                <span className="block text-[10px] font-bold text-sky-800 mb-1">틀린 점수</span>
+              {/* 틀린 번호 입력 박스 */}
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold text-stone-600">
+                  틀린 번호 (쉼표 또는 띄어쓰기로 구분)
+                </label>
                 <input
-                  type="number"
-                  placeholder="0"
-                  value={wrongScore}
-                  onChange={(e) => setWrongScore(e.target.value)}
-                  className="w-full bg-white border border-sky-200 rounded-lg px-2 py-1 text-xs font-extrabold text-center text-sky-600 focus:outline-none"
+                  type="text"
+                  placeholder="ex) 3, 12, 24, 58"
+                  value={wrongInput}
+                  onChange={(e) => setWrongInput(e.target.value)}
+                  className="w-full px-3 py-2 text-xs font-bold border border-stone-200 rounded-xl bg-stone-50 focus:bg-white focus:outline-none"
                 />
-              </div>
 
-              <div className="bg-rose-50/70 border border-rose-200 rounded-xl p-2">
-                <span className="block text-[10px] font-bold text-rose-800 mb-1">어려운 문제</span>
-                <input
-                  type="number"
-                  placeholder="0"
-                  value={unsolvedScore}
-                  onChange={(e) => setUnsolvedScore(e.target.value)}
-                  className="w-full bg-white border border-rose-200 rounded-lg px-2 py-1 text-xs font-extrabold text-center text-rose-600 focus:outline-none"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* 틀린 번호 입력 박스 */}
-          <div className="space-y-1.5">
-            <label className="block text-[11px] font-bold text-stone-600">
-              틀린 번호 (쉼표 또는 띄어쓰기로 구분)
-            </label>
-            <input
-              type="text"
-              placeholder="ex) 3, 12, 24, 58"
-              value={wrongInput}
-              onChange={(e) => setWrongInput(e.target.value)}
-              className="w-full px-3 py-2 text-xs font-bold border border-stone-200 rounded-xl bg-stone-50 focus:bg-white focus:outline-none"
-            />
-
-            {existingGroup && (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-1.5 text-xs">
-                <p className="font-extrabold text-amber-950">
-                  🔍 이전 [{existingGroup.examName}] 오답 비교 ({existingGroup.attempts.length}회 누적)
-                </p>
-                <p className="text-[11px] text-stone-700">
-                  이전 틀린 번호:{" "}
-                  {Array.from(pastWrongSet).length > 0
-                    ? Array.from(pastWrongSet)
-                        .sort((a, b) => a - b)
-                        .map((n) => `${n}번`)
-                        .join(", ")
-                    : "없음"}
-                </p>
-                {liveRepeatedList.length > 0 ? (
-                  <p className="text-[11px] font-extrabold text-rose-600">
-                    ⚠️ 중복 오답 번호: {liveRepeatedList.map((n) => `${n}번`).join(", ")}
-                  </p>
-                ) : (
-                  currentWrongList.length > 0 && (
-                    <p className="text-[11px] font-bold text-emerald-700">
-                      ✅ 이전에 틀렸던 번호는 모두 맞혔습니다!
+                {existingGroup && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-1.5 text-xs">
+                    <p className="font-extrabold text-amber-950">
+                      🔍 이전 [{existingGroup.examName}] 오답 비교 ({existingGroup.attempts.length}회 누적)
                     </p>
-                  )
-                )}
-              </div>
-            )}
-          </div>
-
-          <button
-            type="submit"
-            className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-extrabold rounded-xl shadow-xs transition"
-          >
-            {existingGroup
-              ? `저장하기 (${existingGroup.attempts.length + 1}회차 누적 → 공부 보드 '저장' 연동)`
-              : "저장하기 (1회차 등록)"}
-          </button>
-        </form>
-
-        {/* 2. 실시간 누적된 회차 목록 (2026-1,2,3 -> 2025-1,2,3 순) */}
-        <section className="space-y-2.5">
-          <div className="flex items-center justify-between px-1">
-            <h2 className="text-xs font-extrabold text-stone-700">
-              📚 누적 회차 기록 ({examGroups.length}개 시험 · 복습 {reviewGroupCount}개)
-            </h2>
-          </div>
-
-          {examGroups.length === 0 ? (
-            <div className="bg-white border border-dashed border-stone-300 rounded-2xl p-8 text-center text-xs text-stone-400">
-              아직 저장된 시험 회차가 없습니다.
-              <br />위 박스에 시험 이름(ex. 2026-1)과 점수를 입력해 저장해 보세요!
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              {examGroups.map((group) => {
-                const isOpen = !!openExams[group.examName];
-                const latest = group.attempts[group.attempts.length - 1];
-
-                return (
-                  <div
-                    key={group.examName}
-                    className="bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-2xs"
-                  >
-                    {/* 상단 바 (클릭 시 삼각형 토글) */}
-                    <div
-                      onClick={() => toggleOpen(group.examName)}
-                      className="px-4 py-3.5 flex items-center justify-between cursor-pointer hover:bg-stone-50 transition"
-                    >
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-extrabold text-amber-600">
-                          {isOpen ? "▼" : "▶"}
-                        </span>
-                        <span className="text-sm font-extrabold text-stone-900">
-                          {group.examName}
-                        </span>
-                        <span className="text-[11px] font-bold bg-stone-100 text-stone-700 px-2 py-0.5 rounded-full">
-                          총 {group.attempts.length}회 풀이
-                        </span>
-                        {group.attempts.length >= 2 && (
-                          <span className="text-[10px] font-bold bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full">
-                            🔖 복습 누적됨
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-xs font-extrabold text-emerald-700">
-                          최근 {latest.correctScore}점
-                        </span>
-                        <button
-                          type="button"
-                          onClick={(e) => handleDeleteGroup(e, group.examName)}
-                          className="text-[11px] text-stone-400 hover:text-rose-500 ml-1"
-                        >
-                          삭제
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* 삼각형 클릭 시 펼쳐지는 회차별 세부 내역 */}
-                    {isOpen && (
-                      <div className="px-4 pb-4 pt-2 border-t border-stone-100 bg-stone-50/70 space-y-2">
-                        {group.attempts.map((att) => (
-                          <div
-                            key={att.id}
-                            className="bg-white border border-stone-200 rounded-xl p-3 space-y-2"
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-1.5">
-                                <span
-                                  className={`text-[11px] font-extrabold px-2 py-0.5 rounded-md ${
-                                    att.attemptNo === 1
-                                      ? "bg-stone-800 text-white"
-                                      : "bg-sky-600 text-white"
-                                  }`}
-                                >
-                                  {att.attemptNo}회차
-                                </span>
-                                <span className="text-[11px] text-stone-400">{att.date}</span>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteSingleAttempt(group.examName, att.id)}
-                                className="text-[11px] text-stone-400 hover:text-rose-500"
-                              >
-                                차수 삭제
-                              </button>
-                            </div>
-
-                            {/* 4종 세부 점수 */}
-                            <div className="grid grid-cols-4 gap-1.5 text-center bg-stone-50 p-2 rounded-lg text-[11px]">
-                              <div>
-                                <span className="block text-[10px] text-stone-400">맞춘 점수</span>
-                                <strong className="text-emerald-700">{att.correctScore}점</strong>
-                              </div>
-                              <div>
-                                <span className="block text-[10px] text-stone-400">단답 점수</span>
-                                <strong className="text-stone-900">{att.shortAnswerScore}점</strong>
-                              </div>
-                              <div>
-                                <span className="block text-[10px] text-stone-400">틀린 점수</span>
-                                <strong className="text-sky-600">{att.wrongScore}점</strong>
-                              </div>
-                              <div>
-                                <span className="block text-[10px] text-stone-400">어려운 문제</span>
-                                <strong className="text-rose-600">{att.unsolvedScore}점</strong>
-                              </div>
-                            </div>
-
-                            {/* 틀린 번호 (2회차 이상에서 또 틀린 번호는 연한 빨간 계열 색상으로만 강조) */}
-                            <div className="space-y-1">
-                              <p className="text-[11px] font-bold text-stone-600">
-                                틀린 번호 ({att.wrongNumbers.length}개):
-                              </p>
-                              {att.wrongNumbers.length === 0 ? (
-                                <span className="text-[11px] text-emerald-600 font-bold">
-                                  만점! 틀린 번호 없음
-                                </span>
-                              ) : (
-                                <div className="flex flex-wrap gap-1">
-                                  {att.wrongNumbers.map((num) => {
-                                    const isRepeated =
-                                      att.attemptNo >= 2 &&
-                                      att.repeatedWrongNumbers.includes(num);
-                                    return (
-                                      <span
-                                        key={num}
-                                        className={`text-[11px] font-bold px-2 py-0.5 rounded-md border ${
-                                          isRepeated
-                                            ? "bg-rose-100 text-rose-700 border-rose-200"
-                                            : "bg-stone-100 text-stone-700 border-stone-200"
-                                        }`}
-                                      >
-                                        {num}번
-                                      </span>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                    <p className="text-[11px] text-stone-700">
+                      이전 틀린 번호:{" "}
+                      {Array.from(pastWrongSet).length > 0
+                        ? Array.from(pastWrongSet)
+                            .sort((a, b) => a - b)
+                            .map((n) => `${n}번`)
+                            .join(", ")
+                        : "없음"}
+                    </p>
+                    {liveRepeatedList.length > 0 ? (
+                      <p className="text-[11px] font-extrabold text-rose-600">
+                        ⚠️ 중복 오답 번호: {liveRepeatedList.map((n) => `${n}번`).join(", ")}
+                      </p>
+                    ) : (
+                      currentWrongList.length > 0 && (
+                        <p className="text-[11px] font-bold text-emerald-700">
+                          ✅ 이전에 틀렸던 번호는 모두 맞혔습니다!
+                        </p>
+                      )
                     )}
                   </div>
-                );
-              })}
+                )}
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-extrabold rounded-xl shadow-xs transition"
+              >
+                {existingGroup
+                  ? `저장하기 (${existingGroup.attempts.length + 1}회차 누적 → 공부 보드 '저장' 연동)`
+                  : "저장하기 (1회차 등록)"}
+              </button>
+            </form>
+          )}
+        </section>
+
+        {/* 2. 누적 회차 기록 박스 (위 박스와 동일한 글자 크기·박스형 디자인 + 삼각형 토글) */}
+        <section className="bg-white border border-stone-200 rounded-2xl p-4 shadow-sm space-y-3.5">
+          <div
+            onClick={() => setIsHistoryBoxOpen(!isHistoryBoxOpen)}
+            className="flex items-center justify-between cursor-pointer select-none"
+          >
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-extrabold text-stone-900">📚 누적 회차 기록</h2>
+              <span className="text-xs font-extrabold text-amber-600">
+                {isHistoryBoxOpen ? "▼" : "▶"}
+              </span>
+            </div>
+            <span className="text-[11px] font-bold text-stone-400">
+              {examGroups.length}개 시험 · 복습 {reviewGroupCount}개
+            </span>
+          </div>
+
+          {isHistoryBoxOpen && (
+            <div className="pt-1">
+              {examGroups.length === 0 ? (
+                <div className="bg-stone-50 border border-dashed border-stone-300 rounded-xl p-6 text-center text-xs text-stone-400">
+                  아직 저장된 시험 회차가 없습니다.
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {examGroups.map((group) => {
+                    const isOpen = !!openExams[group.examName];
+                    const latest = group.attempts[group.attempts.length - 1];
+
+                    return (
+                      <div
+                        key={group.examName}
+                        className="bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-2xs"
+                      >
+                        <div
+                          onClick={() => toggleOpen(group.examName)}
+                          className="px-4 py-3.5 flex items-center justify-between cursor-pointer hover:bg-stone-50 transition"
+                        >
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-extrabold text-amber-600">
+                              {isOpen ? "▼" : "▶"}
+                            </span>
+                            <span className="text-sm font-extrabold text-stone-900">
+                              {group.examName}
+                            </span>
+                            <span className="text-[11px] font-bold bg-stone-100 text-stone-700 px-2 py-0.5 rounded-full">
+                              총 {group.attempts.length}회 풀이
+                            </span>
+                            {group.attempts.length >= 2 && (
+                              <span className="text-[10px] font-bold bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full">
+                                🔖 복습 누적됨
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-xs font-extrabold text-emerald-700">
+                              최근 {latest.correctScore}점
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeleteGroup(e, group.examName)}
+                              className="text-[11px] text-stone-400 hover:text-rose-500 ml-1"
+                            >
+                              삭제
+                            </button>
+                          </div>
+                        </div>
+
+                        {isOpen && (
+                          <div className="px-4 pb-4 pt-2 border-t border-stone-100 bg-stone-50/70 space-y-2">
+                            {group.attempts.map((att) => (
+                              <div
+                                key={att.id}
+                                className="bg-white border border-stone-200 rounded-xl p-3 space-y-2"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-1.5">
+                                    <span
+                                      className={`text-[11px] font-extrabold px-2 py-0.5 rounded-md ${
+                                        att.attemptNo === 1
+                                          ? "bg-stone-800 text-white"
+                                          : "bg-sky-600 text-white"
+                                      }`}
+                                    >
+                                      {att.attemptNo}회차
+                                    </span>
+                                    <span className="text-[11px] text-stone-400">{att.date}</span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteSingleAttempt(group.examName, att.id)}
+                                    className="text-[11px] text-stone-400 hover:text-rose-500"
+                                  >
+                                    차수 삭제
+                                  </button>
+                                </div>
+
+                                <div className="grid grid-cols-4 gap-1.5 text-center bg-stone-50 p-2 rounded-lg text-[11px]">
+                                  <div>
+                                    <span className="block text-[10px] text-stone-400">맞춘 점수</span>
+                                    <strong className="text-emerald-700">{att.correctScore}점</strong>
+                                  </div>
+                                  <div>
+                                    <span className="block text-[10px] text-stone-400">단답 점수</span>
+                                    <strong className="text-stone-900">{att.shortAnswerScore}점</strong>
+                                  </div>
+                                  <div>
+                                    <span className="block text-[10px] text-stone-400">틀린 점수</span>
+                                    <strong className="text-sky-600">{att.wrongScore}점</strong>
+                                  </div>
+                                  <div>
+                                    <span className="block text-[10px] text-stone-400">어려운 문제</span>
+                                    <strong className="text-rose-600">{att.unsolvedScore}점</strong>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-1">
+                                  <p className="text-[11px] font-bold text-stone-600">
+                                    틀린 번호 ({att.wrongNumbers.length}개):
+                                  </p>
+                                  {att.wrongNumbers.length === 0 ? (
+                                    <span className="text-[11px] text-emerald-600 font-bold">
+                                      만점! 틀린 번호 없음
+                                    </span>
+                                  ) : (
+                                    <div className="flex flex-wrap gap-1">
+                                      {att.wrongNumbers.map((num) => {
+                                        const isRepeated =
+                                          att.attemptNo >= 2 &&
+                                          att.repeatedWrongNumbers.includes(num);
+                                        return (
+                                          <span
+                                            key={num}
+                                            className={`text-[11px] font-bold px-2 py-0.5 rounded-md border ${
+                                              isRepeated
+                                                ? "bg-rose-100 text-rose-700 border-rose-200"
+                                                : "bg-stone-100 text-stone-700 border-stone-200"
+                                            }`}
+                                          >
+                                            {num}번
+                                          </span>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </section>
+
+        {/* 3. 단답 기록 박스 (스크린샷 AI 글자 추출 + 문제 + 정답 + 단답 기록 버튼) */}
+        <ShortAnswerBox todayStr={todayStr} />
       </main>
     </div>
   );
