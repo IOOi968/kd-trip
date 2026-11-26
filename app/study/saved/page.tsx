@@ -20,6 +20,24 @@ interface ExamGroup {
   attempts: AttemptRecord[];
 }
 
+function sortExamGroups(groups: ExamGroup[]): ExamGroup[] {
+  return [...groups].sort((a, b) => {
+    const matchA = a.examName.match(/^(\d{4})\D*(\d+)?/);
+    const matchB = b.examName.match(/^(\d{4})\D*(\d+)?/);
+
+    if (matchA && matchB) {
+      const yearA = Number(matchA[1]);
+      const yearB = Number(matchB[1]);
+      if (yearA !== yearB) return yearB - yearA;
+
+      const roundA = matchA[2] ? Number(matchA[2]) : 0;
+      const roundB = matchB[2] ? Number(matchB[2]) : 0;
+      if (roundA !== roundB) return roundA - roundB;
+    }
+    return b.examName.localeCompare(a.examName, "ko", { numeric: true });
+  });
+}
+
 export default function SavedReviewPage() {
   const [reviewExams, setReviewExams] = useState<ExamGroup[]>([]);
   const [openExams, setOpenExams] = useState<Record<string, boolean>>({});
@@ -29,7 +47,7 @@ export default function SavedReviewPage() {
       const saved = localStorage.getItem("kwan_study_ee_exams_v1");
       if (saved) {
         const parsed: ExamGroup[] = JSON.parse(saved);
-        setReviewExams(parsed.filter((g) => g.attempts.length >= 2));
+        setReviewExams(sortExamGroups(parsed.filter((g) => g.attempts.length >= 2)));
       }
     } catch {
       // 파싱 오류 무시
@@ -63,7 +81,7 @@ export default function SavedReviewPage() {
         {reviewExams.length === 0 ? (
           <div className="bg-white border border-dashed border-stone-300 rounded-2xl p-8 text-center text-xs text-stone-400 space-y-2">
             <p className="font-bold text-stone-600">아직 복습 누적된 회차가 없습니다.</p>
-            <p>전기기사에서 같은 시험(ex. 2025-1)을 2회차 이상 다시 풀어 저장하면 이곳에 자동으로 모입니다.</p>
+            <p>전기기사에서 같은 시험(ex. 2026-1)을 2회차 이상 다시 풀어 저장하면 이곳에 자동으로 모입니다.</p>
           </div>
         ) : (
           reviewExams.map((group) => {
@@ -103,30 +121,33 @@ export default function SavedReviewPage() {
                     {group.attempts.map((att) => (
                       <div
                         key={att.id}
-                        className="bg-white border border-stone-200 rounded-xl p-3 space-y-1.5 text-xs"
+                        className="bg-white border border-stone-200 rounded-xl p-3 space-y-2 text-xs"
                       >
                         <div className="flex items-center justify-between font-bold">
                           <span className="text-stone-900">
                             {att.attemptNo}회차 ({att.date})
                           </span>
-                          <span className="text-[11px] text-emerald-700">
-                            맞춤 {att.correctScore} · 단답 {att.shortAnswerScore} · 틀림{" "}
-                            {att.wrongScore} · 못맞춤 {att.unsolvedScore}
+                          <span className="text-[11px]">
+                            <span className="text-emerald-700">맞춤 {att.correctScore}</span> ·{" "}
+                            <span className="text-stone-900">단답 {att.shortAnswerScore}</span> ·{" "}
+                            <span className="text-sky-600">틀림 {att.wrongScore}</span> ·{" "}
+                            <span className="text-rose-600">어려움 {att.unsolvedScore}</span>
                           </span>
                         </div>
                         <div className="flex flex-wrap gap-1">
                           {att.wrongNumbers.map((num) => {
-                            const repeated = att.repeatedWrongNumbers.includes(num);
+                            const repeated =
+                              att.attemptNo >= 2 && att.repeatedWrongNumbers.includes(num);
                             return (
                               <span
                                 key={num}
-                                className={`text-[11px] px-2 py-0.5 rounded font-bold ${
+                                className={`text-[11px] px-2 py-0.5 rounded font-bold border ${
                                   repeated
-                                    ? "bg-rose-600 text-white"
-                                    : "bg-stone-100 text-stone-600"
+                                    ? "bg-rose-100 text-rose-700 border-rose-200"
+                                    : "bg-stone-100 text-stone-700 border-stone-200"
                                 }`}
                               >
-                                {num}번{repeated ? " (또 틀림)" : ""}
+                                {num}번
                               </span>
                             );
                           })}
