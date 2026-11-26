@@ -40,6 +40,13 @@ export default function TodoPage() {
   const [editingText, setEditingText] = useState("");
   const [editingPreset, setEditingPreset] = useState("일반");
 
+  // 꾹 눌러서 순서 이동 상태 (상단 프리셋 칸 & 하단 필터 탭 공용)
+  const [reorderingPreset, setReorderingPreset] = useState<string | null>(null);
+  const [reorderSource, setReorderSource] = useState<"top" | "bottom" | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pressStartPosRef = useRef<{ x: number; y: number } | null>(null);
+  const didReorderRef = useRef(false);
+
   // 한 줄 필터 바 좌우 드래그 스크롤 ref
   const filterBarRef = useRef<HTMLDivElement>(null);
   const isDraggingFilter = useRef(false);
@@ -101,6 +108,97 @@ export default function TodoPage() {
     localStorage.setItem(ITEMS_KEY, JSON.stringify(next));
   };
 
+  const clearLongPressTimer = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  // 꾹 누르기 시작 (0.35초 유지 시 순서 이동 모드 진입)
+  const handlePresetPointerDown = (
+    e: React.PointerEvent,
+    presetName: string,
+    source: "top" | "bottom"
+  ) => {
+    if (presetName === "전체" || isDeletingPreset) return;
+    clearLongPressTimer();
+    didReorderRef.current = false;
+    pressStartPosRef.current = { x: e.clientX, y: e.clientY };
+
+    longPressTimerRef.current = setTimeout(() => {
+      setReorderingPreset(presetName);
+      setReorderSource(source);
+      didReorderRef.current = true;
+      isDraggingFilter.current = false;
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+        try {
+          navigator.vibrate(25);
+        } catch {}
+      }
+    }, 350);
+  };
+
+  // 롱프레스 대기 중 손가락/마우스가 크게 움직이면 롱프레스 취소(일반 스크롤 허용)
+  const handlePresetPointerMoveCancelCheck = (e: React.PointerEvent) => {
+    if (!longPressTimerRef.current || !pressStartPosRef.current) return;
+    const dx = Math.abs(e.clientX - pressStartPosRef.current.x);
+    const dy = Math.abs(e.clientY - pressStartPosRef.current.y);
+    if (dx > 8 || dy > 8) {
+      clearLongPressTimer();
+    }
+  };
+
+  // 순서 이동 모드 중 포인터가 다른 프리셋 위로 지나가면 위치 즉시 교환
+  useEffect(() => {
+    if (!reorderingPreset || !reorderSource) return;
+
+    const movePresetToTarget = (fromName: string, toName: string) => {
+      if (fromName === toName || toName === "전체") return;
+      setPresets((prev) => {
+        // '일반'이 presets 배열에 아직 없으면 맨 앞에 포함시킨 뒤 이동
+        const base = prev.includes("일반") ? [...prev] : ["일반", ...prev];
+        const fromIdx = base.indexOf(fromName);
+        const toIdx = base.indexOf(toName);
+        if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return prev;
+
+        const next = [...base];
+        const [moved] = next.splice(fromIdx, 1);
+        next.splice(toIdx, 0, moved);
+        localStorage.setItem(PRESETS_KEY, JSON.stringify(next));
+        return next;
+      });
+    };
+
+    const handleGlobalPointerMove = (e: PointerEvent) => {
+      e.preventDefault();
+      const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+      const chip = el?.closest(`[data-preset-zone="${reorderSource}"]`) as HTMLElement | null;
+      const hoveredName = chip?.getAttribute("data-preset-name");
+      if (hoveredName && hoveredName !== reorderingPreset) {
+        movePresetToTarget(reorderingPreset, hoveredName);
+      }
+    };
+
+    const handleGlobalPointerUp = () => {
+      clearLongPressTimer();
+      setReorderingPreset(null);
+      setReorderSource(null);
+      setTimeout(() => {
+        didReorderRef.current = false;
+      }, 50);
+    };
+
+    window.addEventListener("pointermove", handleGlobalPointerMove, { passive: false });
+    window.addEventListener("pointerup", handleGlobalPointerUp);
+    window.addEventListener("pointercancel", handleGlobalPointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handleGlobalPointerMove);
+      window.removeEventListener("pointerup", handleGlobalPointerUp);
+      window.removeEventListener("pointercancel", handleGlobalPointerUp);
+    };
+  }, [reorderingPreset, reorderSource]);
+
   const handleAddPreset = (e: React.FormEvent) => {
     e.preventDefault();
     const name = newPresetName.trim();
@@ -128,7 +226,6 @@ export default function TodoPage() {
       .filter((p) => p && p !== "일반")
       .sort((a, b) => b.length - a.length);
 
-    // 1) 맨 앞에 프리셋 이름이 붙은 경우 (예: "운동/ 홈페이지 만들기" -> preset: "운동/", content: "홈페이지 만들기")
     const prefixMatch = sortedPresets.find((p) => rawText.startsWith(p));
     if (prefixMatch) {
       const stripped = rawText.slice(prefixMatch.length).trim();
@@ -138,7 +235,6 @@ export default function TodoPage() {
       };
     }
 
-    // 2) 내용 중간에 프리셋 이름과 동일한 단어가 포함된 경우
     const anywhereMatch = sortedPresets.find((p) => rawText.includes(p));
     if (anywhereMatch) {
       return {
@@ -223,14 +319,15 @@ export default function TodoPage() {
   };
 
   const presetOptions = useMemo(() => {
-    const base = ["일반", ...presets.filter((p) => p !== "일반")];
-    return Array.from(new Set(base));
+    if (presets.includes("일반")) {
+      return Array.from(new Set(presets));
+    }
+    return Array.from(new Set(["일반", ...presets]));
   }, [presets]);
 
   const filterTabs = useMemo(() => {
-    const base = ["전체", "일반", ...presets.filter((p) => p !== "일반")];
-    return Array.from(new Set(base));
-  }, [presets]);
+    return ["전체", ...presetOptions];
+  }, [presetOptions]);
 
   const visibleItems = useMemo(() => {
     const filtered =
@@ -240,8 +337,9 @@ export default function TodoPage() {
     return [...filtered].sort((a, b) => Number(a.done) - Number(b.done));
   }, [items, viewPreset]);
 
-  // 좌우 드래그 스크롤 핸들러
+  // 좌우 드래그 스크롤 핸들러 (순서 이동 모드가 아닐 때만 동작)
   const onFilterMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (reorderingPreset) return;
     const el = filterBarRef.current;
     if (!el) return;
     isDraggingFilter.current = true;
@@ -251,7 +349,7 @@ export default function TodoPage() {
   };
 
   const onFilterMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDraggingFilter.current || !filterBarRef.current) return;
+    if (reorderingPreset || !isDraggingFilter.current || !filterBarRef.current) return;
     const x = e.pageX - filterBarRef.current.offsetLeft;
     if (Math.abs(x - dragStartX.current) > 4) {
       draggedMoved.current = true;
@@ -293,14 +391,24 @@ export default function TodoPage() {
       </header>
 
       <main className="max-w-md mx-auto px-4 pt-4 space-y-5 min-w-0">
-        {/* 프리셋 관리 영역 */}
+        {/* 프리셋 관리 영역 (꾹 눌러서 위치 이동 가능) */}
         <section className="bg-white border border-stone-200 rounded-2xl p-3.5 shadow-2xs space-y-2.5 min-w-0">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-bold text-stone-700">🗂️ 프리셋</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-bold text-stone-700">🗂️ 프리셋</span>
+              {reorderingPreset && reorderSource === "top" && (
+                <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                  순서 이동 중
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-1.5 shrink-0">
               <button
                 type="button"
-                onClick={() => setIsDeletingPreset(!isDeletingPreset)}
+                onClick={() => {
+                  setReorderingPreset(null);
+                  setIsDeletingPreset(!isDeletingPreset);
+                }}
                 className={`text-[11px] font-bold px-2.5 py-1 rounded-lg transition ${
                   isDeletingPreset
                     ? "bg-rose-100 text-rose-700"
@@ -320,22 +428,35 @@ export default function TodoPage() {
           </div>
 
           {presets.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 min-w-0">
+            <div className="flex flex-wrap gap-1.5 min-w-0 select-none">
               {presets.map((preset) => {
                 const count = items.filter((i) => i.preset === preset).length;
                 const active = targetPreset === preset;
+                const isBeingMoved =
+                  reorderingPreset === preset && reorderSource === "top";
                 return (
                   <div
                     key={preset}
-                    className={`inline-flex items-center rounded-xl text-xs font-bold border transition max-w-full overflow-hidden ${
-                      active
+                    data-preset-zone="top"
+                    data-preset-name={preset}
+                    onPointerDown={(e) => handlePresetPointerDown(e, preset, "top")}
+                    onPointerMove={handlePresetPointerMoveCancelCheck}
+                    onPointerUp={clearLongPressTimer}
+                    onContextMenu={(e) => e.preventDefault()}
+                    className={`inline-flex items-center rounded-xl text-xs font-bold border transition max-w-full overflow-hidden touch-none ${
+                      isBeingMoved
+                        ? "bg-amber-300 text-amber-950 border-amber-500 scale-105 shadow-md ring-2 ring-amber-300 z-10"
+                        : active
                         ? "bg-amber-100 text-amber-900 border-amber-300"
                         : "bg-stone-50 text-stone-600 border-stone-200"
                     }`}
                   >
                     <button
                       type="button"
-                      onClick={() => setTargetPreset(preset)}
+                      onClick={() => {
+                        if (didReorderRef.current) return;
+                        setTargetPreset(preset);
+                      }}
                       className="px-3 py-1.5 break-all text-left hover:opacity-80"
                     >
                       {preset} ({count})
@@ -420,7 +541,7 @@ export default function TodoPage() {
           </button>
         </form>
 
-        {/* 한 줄 좌우 드래그 필터 바 & 항목 목록 */}
+        {/* 한 줄 좌우 드래그 & 꾹 눌러서 순서 이동 가능한 필터 바 + 항목 목록 */}
         <section className="space-y-2.5 min-w-0">
           <div
             ref={filterBarRef}
@@ -432,6 +553,8 @@ export default function TodoPage() {
           >
             {filterTabs.map((tab) => {
               const active = viewPreset === tab;
+              const isBeingMoved =
+                reorderingPreset === tab && reorderSource === "bottom";
               const tabCount =
                 tab === "전체"
                   ? items.length
@@ -440,14 +563,22 @@ export default function TodoPage() {
                 <button
                   key={tab}
                   type="button"
+                  data-preset-zone="bottom"
+                  data-preset-name={tab}
+                  onPointerDown={(e) => handlePresetPointerDown(e, tab, "bottom")}
+                  onPointerMove={handlePresetPointerMoveCancelCheck}
+                  onPointerUp={clearLongPressTimer}
+                  onContextMenu={(e) => e.preventDefault()}
                   onClick={() => {
-                    if (draggedMoved.current) return;
+                    if (draggedMoved.current || didReorderRef.current) return;
                     setEditingId(null);
                     setEditingText("");
                     setViewPreset(tab);
                   }}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition shrink-0 whitespace-nowrap ${
-                    active
+                    isBeingMoved
+                      ? "bg-amber-400 text-stone-950 border-amber-600 scale-105 shadow-md ring-2 ring-amber-300 z-10"
+                      : active
                       ? "bg-stone-900 text-white border-stone-900"
                       : "bg-white text-stone-600 border-stone-200 hover:bg-stone-100"
                   }`}
