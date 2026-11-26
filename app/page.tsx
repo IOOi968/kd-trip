@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 
 interface CategoryCard {
@@ -18,9 +18,15 @@ const AVAILABLE_CATEGORIES: Omit<CategoryCard, "id">[] = [
   { name: "공부", icon: "📚", href: "/study", color: "bg-emerald-50 border-emerald-200 text-emerald-900" },
 ];
 
+type DeployStatus = "synced" | "building" | "ready";
+
 export default function MainDashboard() {
   const [cards, setCards] = useState<CategoryCard[]>([]);
   const [isAdding, setIsAdding] = useState(false);
+
+  const [deployStatus, setDeployStatus] = useState<DeployStatus>("synced");
+  const initialShaRef = useRef<string | null>(null);
+  const buildingStartRef = useRef<number | null>(null);
 
   useEffect(() => {
     try {
@@ -29,6 +35,40 @@ export default function MainDashboard() {
     } catch {
       // 저장 데이터 파싱 실패 시 무시
     }
+  }, []);
+
+  useEffect(() => {
+    const checkLatestCommit = async () => {
+      try {
+        const res = await fetch(
+          "https://api.github.com/repos/IOOi968/kd-trip/commits/main",
+          { cache: "no-store" }
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        const latestSha: string = data.sha;
+
+        if (!initialShaRef.current) {
+          initialShaRef.current = latestSha;
+          return;
+        }
+
+        if (latestSha !== initialShaRef.current) {
+          if (!buildingStartRef.current) {
+            buildingStartRef.current = Date.now();
+            setDeployStatus("building");
+          } else if (Date.now() - buildingStartRef.current > 45000) {
+            setDeployStatus("ready");
+          }
+        }
+      } catch {
+        // 네트워크 일시 오류 무시
+      }
+    };
+
+    checkLatestCommit();
+    const timer = setInterval(checkLatestCommit, 10000);
+    return () => clearInterval(timer);
   }, []);
 
   const saveCards = (next: CategoryCard[]) => {
@@ -55,16 +95,50 @@ export default function MainDashboard() {
     <div className="min-h-screen bg-stone-50 text-stone-800 px-4 py-8">
       <div className="max-w-md mx-auto space-y-6">
         {/* 상단 헤더 */}
-        <header className="flex items-center justify-between">
+        <header className="flex items-center justify-between gap-2">
           <div>
             <h1 className="text-2xl font-extrabold text-stone-900">나의 라이프 보드</h1>
             <p className="text-xs text-stone-500 mt-1">
               카테고리를 선택해 나만의 홈을 구성하세요 ({cards.length}/6)
             </p>
           </div>
-          <span className="text-[11px] font-bold bg-stone-900 text-white px-2.5 py-1 rounded-full">
-            MY HOME
-          </span>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            {deployStatus === "synced" && (
+              <span
+                title="GitHub 최신 코드가 반영된 상태입니다"
+                className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-1 rounded-full"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                최신
+              </span>
+            )}
+
+            {deployStatus === "building" && (
+              <span
+                title="GitHub 수정 감지! Vercel에서 반영 중입니다..."
+                className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 rounded-full animate-pulse"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                반영중
+              </span>
+            )}
+
+            {deployStatus === "ready" && (
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="inline-flex items-center gap-1 text-[10px] font-bold bg-sky-600 text-white px-2 py-1 rounded-full shadow-xs hover:bg-sky-700 transition"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                적용됨 ↻
+              </button>
+            )}
+
+            <span className="text-[11px] font-bold bg-stone-900 text-white px-2.5 py-1 rounded-full">
+              MY HOME
+            </span>
+          </div>
         </header>
 
         {/* 3x2 동적 그리드 보드 */}
