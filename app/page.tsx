@@ -25,8 +25,7 @@ export default function MainDashboard() {
   const [isAdding, setIsAdding] = useState(false);
 
   const [deployStatus, setDeployStatus] = useState<DeployStatus>("synced");
-  const initialShaRef = useRef<string | null>(null);
-  const buildingStartRef = useRef<number | null>(null);
+  const loadedShaRef = useRef<string | null>(null);
 
   useEffect(() => {
     try {
@@ -37,8 +36,9 @@ export default function MainDashboard() {
     }
   }, []);
 
+  // 창을 나갔다 들어오거나 새로고침해도 마지막 커밋 시각을 기준으로 반영중/최신 정확 판별
   useEffect(() => {
-    const checkLatestCommit = async () => {
+    const checkDeployStatus = async () => {
       try {
         const res = await fetch(
           "https://api.github.com/repos/IOOi968/kd-trip/commits/main",
@@ -47,27 +47,40 @@ export default function MainDashboard() {
         if (!res.ok) return;
         const data = await res.json();
         const latestSha: string = data.sha;
+        const commitDateStr: string | undefined =
+          data.commit?.committer?.date || data.commit?.author?.date;
 
-        if (!initialShaRef.current) {
-          initialShaRef.current = latestSha;
+        const commitTime = commitDateStr ? new Date(commitDateStr).getTime() : 0;
+        const elapsedMs = Date.now() - commitTime;
+        const BUILD_DURATION_MS = 75000; // Vercel 평균 빌드 소요 시간(약 75초)
+
+        if (!loadedShaRef.current) {
+          loadedShaRef.current = latestSha;
+        }
+
+        // 보고 있는 도중 새 커밋이 올라온 경우
+        if (latestSha !== loadedShaRef.current) {
+          if (elapsedMs < BUILD_DURATION_MS) {
+            setDeployStatus("building");
+          } else {
+            setDeployStatus("ready");
+          }
           return;
         }
 
-        if (latestSha !== initialShaRef.current) {
-          if (!buildingStartRef.current) {
-            buildingStartRef.current = Date.now();
-            setDeployStatus("building");
-          } else if (Date.now() - buildingStartRef.current > 45000) {
-            setDeployStatus("ready");
-          }
+        // 새로고침/재접속 시에도 최근 75초 이내 커밋이면 반영중으로 표시
+        if (commitTime && elapsedMs < BUILD_DURATION_MS) {
+          setDeployStatus("building");
+        } else {
+          setDeployStatus("synced");
         }
       } catch {
         // 네트워크 일시 오류 무시
       }
     };
 
-    checkLatestCommit();
-    const timer = setInterval(checkLatestCommit, 10000);
+    checkDeployStatus();
+    const timer = setInterval(checkDeployStatus, 8000);
     return () => clearInterval(timer);
   }, []);
 
