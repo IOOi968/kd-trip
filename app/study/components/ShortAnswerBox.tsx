@@ -34,7 +34,9 @@ function compressImage(file: File): Promise<string> {
 }
 
 export default function ShortAnswerBox({ todayStr }: { todayStr: string }) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isRegisterOpen, setIsRegisterOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+
   const [items, setItems] = useState<ShortAnswerItem[]>([]);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
@@ -55,7 +57,6 @@ export default function ShortAnswerBox({ todayStr }: { todayStr: string }) {
     localStorage.setItem(SHORT_KEY, JSON.stringify(next));
   };
 
-  // 스크린샷 선택 시 AI로 글자 분석해 문제/정답 칸 자동 채우기
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -96,10 +97,11 @@ export default function ShortAnswerBox({ todayStr }: { todayStr: string }) {
     saveItems([newItem, ...items]);
     setQuestion("");
     setAnswer("");
+    setIsHistoryOpen(true);
   };
 
   const handleDelete = (id: number) => {
-    if (confirm("이 단답 기록을 삭제할까요?")) {
+    if (confirm("이 단답 문제를 삭제할까요?")) {
       saveItems(items.filter((item) => item.id !== id));
     }
   };
@@ -109,23 +111,23 @@ export default function ShortAnswerBox({ todayStr }: { todayStr: string }) {
   };
 
   return (
-    <section className="bg-white border border-stone-200 rounded-2xl p-4 shadow-sm space-y-3.5">
-      {/* 1·2번 박스와 완전히 동일한 글자 크기·스타일의 헤더 + 삼각형 토글 */}
-      <div
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center justify-between cursor-pointer select-none"
-      >
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-extrabold text-stone-900">✍️ 단답 기록</h2>
-          <span className="text-xs font-extrabold text-amber-600">{isOpen ? "▼" : "▶"}</span>
+    <>
+      {/* 1. 단답 문제 등록 박스 */}
+      <section className="bg-white border border-stone-200 rounded-2xl p-4 shadow-sm space-y-3.5">
+        <div
+          onClick={() => setIsRegisterOpen(!isRegisterOpen)}
+          className="flex items-center justify-between cursor-pointer select-none"
+        >
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-extrabold text-stone-900">✍️ 단답 문제 등록</h2>
+            <span className="text-xs font-extrabold text-amber-600">
+              {isRegisterOpen ? "▼" : "▶"}
+            </span>
+          </div>
         </div>
-        <span className="text-[11px] font-bold text-stone-400">{items.length}개</span>
-      </div>
 
-      {isOpen && (
-        <div className="space-y-4 pt-1">
-          <form onSubmit={handleAddShortAnswer} className="space-y-3">
-            {/* 스크린샷 넣는 칸 + AI 글자 분석 */}
+        {isRegisterOpen && (
+          <form onSubmit={handleAddShortAnswer} className="space-y-3 pt-1">
             <label className="block w-full py-2.5 px-3 bg-amber-50/70 hover:bg-amber-100/70 border border-dashed border-amber-300 rounded-xl text-center cursor-pointer transition">
               <span className="text-xs font-extrabold text-amber-900">
                 {isExtracting
@@ -141,7 +143,6 @@ export default function ShortAnswerBox({ todayStr }: { todayStr: string }) {
               />
             </label>
 
-            {/* 문제 내용 넣는 박스 */}
             <div className="space-y-1">
               <label className="block text-[11px] font-bold text-stone-600">문제 내용</label>
               <textarea
@@ -154,7 +155,6 @@ export default function ShortAnswerBox({ todayStr }: { todayStr: string }) {
               />
             </div>
 
-            {/* 정답 넣는 박스 */}
             <div className="space-y-1">
               <label className="block text-[11px] font-bold text-stone-600">정답</label>
               <textarea
@@ -174,56 +174,79 @@ export default function ShortAnswerBox({ todayStr }: { todayStr: string }) {
               단답 기록
             </button>
           </form>
+        )}
+      </section>
 
-          {/* 저장된 단답 문제 목록 */}
-          {items.length > 0 && (
-            <div className="space-y-2 pt-2 border-t border-stone-100">
-              {items.map((item, idx) => {
-                const isRevealed = !!revealedIds[item.id];
-                return (
-                  <div
-                    key={item.id}
-                    className="bg-stone-50 border border-stone-200 rounded-xl p-3 space-y-2 text-xs"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-extrabold text-amber-800">
-                        Q{items.length - idx}. ({item.date})
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(item.id)}
-                        className="text-[11px] text-stone-400 hover:text-rose-500"
-                      >
-                        삭제
-                      </button>
-                    </div>
-
-                    <p className="text-xs font-bold text-stone-800 whitespace-pre-line leading-relaxed">
-                      {item.question}
-                    </p>
-
-                    <div className="pt-1">
-                      <button
-                        type="button"
-                        onClick={() => toggleReveal(item.id)}
-                        className="text-[11px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg"
-                      >
-                        {isRevealed ? "정답 숨기기 ▲" : "정답 확인 ▼"}
-                      </button>
-
-                      {isRevealed && (
-                        <p className="mt-2 p-2.5 bg-white border border-emerald-200 rounded-lg text-xs font-extrabold text-emerald-900 whitespace-pre-line">
-                          {item.answer}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+      {/* 2. 누적 단답 기록 박스 (박스 안에 겹박스 없이 얇은 구분선만 적용) */}
+      <section className="bg-white border border-stone-200 rounded-2xl p-4 shadow-sm space-y-3">
+        <div
+          onClick={() => setIsHistoryOpen(!isHistoryOpen)}
+          className="flex items-center justify-between cursor-pointer select-none"
+        >
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-extrabold text-stone-900">📋 누적 단답 기록</h2>
+            <span className="text-xs font-extrabold text-amber-600">
+              {isHistoryOpen ? "▼" : "▶"}
+            </span>
+          </div>
+          <span className="text-[11px] font-bold text-stone-400">{items.length}문제</span>
         </div>
-      )}
-    </section>
+
+        {isHistoryOpen && (
+          <div className="border-t border-stone-200 pt-1">
+            {items.length === 0 ? (
+              <p className="py-6 text-center text-xs text-stone-400">
+                아직 등록된 단답 문제가 없습니다.
+              </p>
+            ) : (
+              <div className="divide-y divide-stone-200">
+                {items.map((item, idx) => {
+                  const isRevealed = !!revealedIds[item.id];
+                  return (
+                    <div key={item.id} className="py-3.5 space-y-2 text-xs">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] font-extrabold text-amber-700">
+                            #{items.length - idx}
+                          </span>
+                          <span className="text-[11px] text-stone-400">{item.date}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(item.id)}
+                          className="text-[11px] text-stone-400 hover:text-rose-500"
+                        >
+                          삭제
+                        </button>
+                      </div>
+
+                      <p className="text-xs font-bold text-stone-800 whitespace-pre-line leading-relaxed">
+                        {item.question}
+                      </p>
+
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => toggleReveal(item.id)}
+                          className="text-[11px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg"
+                        >
+                          {isRevealed ? "정답 숨기기 ▲" : "정답 보기 ▼"}
+                        </button>
+
+                        {isRevealed && (
+                          <p className="mt-2 pt-2 border-t border-dashed border-stone-200 text-xs font-extrabold text-emerald-800 whitespace-pre-line leading-relaxed">
+                            {item.answer}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+    </>
   );
 }
