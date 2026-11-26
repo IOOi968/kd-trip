@@ -19,11 +19,9 @@ export default function StudyQuizPage() {
   const [subjects, setSubjects] = useState<SubjectCard[]>([]);
   const [shortItems, setShortItems] = useState<ShortAnswerItem[]>([]);
 
-  // 모달 상태
   const [activeSubject, setActiveSubject] = useState<string | null>(null);
   const [modalMode, setModalMode] = useState<"setup" | "wrong-only">("setup");
 
-  // 자주 틀린 문제 아코디언 & 정답 토글
   const [isWrongListOpen, setIsWrongListOpen] = useState(true);
   const [revealedIds, setRevealedIds] = useState<Record<number, boolean>>({});
 
@@ -51,7 +49,6 @@ export default function StudyQuizPage() {
     }
   }, []);
 
-  // 맞음 / 틀림 판정 시 오답 횟수(wrongCount) 실시간 누적 저장
   const handleRecordResult = (id: number, isCorrect: boolean) => {
     if (isCorrect) return;
     setShortItems((prev) => {
@@ -71,14 +68,12 @@ export default function StudyQuizPage() {
     localStorage.setItem(SHORT_KEY, JSON.stringify(next));
   };
 
-  // 자주 틀린 문제 (wrongCount >= 1 인 항목을 많이 틀린 순으로 정렬)
   const frequentWrongItems = [...shortItems]
     .filter((item) => (item.wrongCount || 0) > 0)
     .sort((a, b) => (b.wrongCount || 0) - (a.wrongCount || 0));
 
   return (
     <div className="min-h-screen bg-stone-50 text-stone-800 pb-20">
-      {/* 상단 고정 헤더 (STUDY 배지 통일) */}
       <header className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-stone-200 px-4 py-3.5">
         <div className="max-w-md mx-auto flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -97,7 +92,6 @@ export default function StudyQuizPage() {
       </header>
 
       <main className="max-w-md mx-auto px-4 pt-5 space-y-5">
-        {/* 1. 나의 공부 과목 카테고리 선택 */}
         <section className="space-y-2.5">
           <h2 className="text-xs font-bold text-stone-600 px-1">과목 선택</h2>
           <div className="grid grid-cols-3 gap-3">
@@ -118,7 +112,6 @@ export default function StudyQuizPage() {
           </div>
         </section>
 
-        {/* 2. 자주 틀린 문제 모음 박스 (얇은 구분선 스타일) */}
         <section className="bg-white border border-stone-200 rounded-2xl p-4 shadow-sm space-y-3">
           <div
             onClick={() => setIsWrongListOpen(!isWrongListOpen)}
@@ -173,9 +166,19 @@ export default function StudyQuizPage() {
                             </button>
                           </div>
 
-                          <p className="text-xs font-bold text-stone-800 whitespace-pre-line leading-relaxed">
-                            {item.question}
-                          </p>
+                          {item.imageDataUrl && (
+                            <img
+                              src={item.imageDataUrl}
+                              alt="자주 틀린 문제 스크린샷"
+                              className="w-full max-h-60 object-contain rounded-xl border border-stone-200 bg-stone-50"
+                            />
+                          )}
+
+                          {item.question && (
+                            <p className="text-xs font-bold text-stone-800 whitespace-pre-line leading-relaxed">
+                              {item.question}
+                            </p>
+                          )}
 
                           <div>
                             <button
@@ -208,7 +211,6 @@ export default function StudyQuizPage() {
         </section>
       </main>
 
-      {/* 과목 클릭 시 뜨는 투명 배경 설정 및 단답 퀴즈 모달 */}
       {activeSubject && (
         <QuizRunnerModal
           subjectName={activeSubject}
