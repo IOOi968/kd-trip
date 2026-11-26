@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import StudyTimerBox from "./components/StudyTimerBox";
+import StudyTimerBox from "../components/StudyTimerBox";
 import {
   DayTimeRecord,
   getStudyDateAndSlot,
