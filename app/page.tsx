@@ -23,6 +23,7 @@ type DeployStatus = "synced" | "building" | "ready";
 export default function MainDashboard() {
   const [cards, setCards] = useState<CategoryCard[]>([]);
   const [isAdding, setIsAdding] = useState(false);
+  const [isEditingCards, setIsEditingCards] = useState(false);
 
   const [deployStatus, setDeployStatus] = useState<DeployStatus>("synced");
   const loadedShaRef = useRef<string | null>(null);
@@ -36,7 +37,6 @@ export default function MainDashboard() {
     }
   }, []);
 
-  // 창을 나갔다 들어오거나 새로고침해도 마지막 커밋 시각을 기준으로 반영중/최신 정확 판별
   useEffect(() => {
     const checkDeployStatus = async () => {
       try {
@@ -52,13 +52,12 @@ export default function MainDashboard() {
 
         const commitTime = commitDateStr ? new Date(commitDateStr).getTime() : 0;
         const elapsedMs = Date.now() - commitTime;
-        const BUILD_DURATION_MS = 75000; // Vercel 평균 빌드 소요 시간(약 75초)
+        const BUILD_DURATION_MS = 75000;
 
         if (!loadedShaRef.current) {
           loadedShaRef.current = latestSha;
         }
 
-        // 보고 있는 도중 새 커밋이 올라온 경우
         if (latestSha !== loadedShaRef.current) {
           if (elapsedMs < BUILD_DURATION_MS) {
             setDeployStatus("building");
@@ -68,7 +67,6 @@ export default function MainDashboard() {
           return;
         }
 
-        // 새로고침/재접속 시에도 최근 75초 이내 커밋이면 반영중으로 표시
         if (commitTime && elapsedMs < BUILD_DURATION_MS) {
           setDeployStatus("building");
         } else {
@@ -100,7 +98,9 @@ export default function MainDashboard() {
     e.preventDefault();
     e.stopPropagation();
     if (confirm("이 카테고리 칸을 삭제할까요?")) {
-      saveCards(cards.filter((c) => c.id !== id));
+      const next = cards.filter((c) => c.id !== id);
+      saveCards(next);
+      if (next.length === 0) setIsEditingCards(false);
     }
   };
 
@@ -108,15 +108,30 @@ export default function MainDashboard() {
     <div className="min-h-screen bg-stone-50 text-stone-800 px-4 py-8">
       <div className="max-w-md mx-auto space-y-6">
         {/* 상단 헤더 */}
-        <header className="flex items-center justify-between gap-2">
+        <header className="flex items-start justify-between gap-2">
           <div>
             <h1 className="text-2xl font-extrabold text-stone-900">나의 라이프 보드</h1>
-            <p className="text-xs text-stone-500 mt-1">
-              카테고리를 선택해 나만의 홈을 구성하세요 ({cards.length}/6)
-            </p>
+            <div className="flex items-center gap-2 mt-1">
+              <p className="text-xs text-stone-500">
+                나만의 홈을 구성하세요 ({cards.length}/6)
+              </p>
+              {cards.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setIsEditingCards(!isEditingCards)}
+                  className={`text-[11px] font-bold px-2 py-0.5 rounded-md border transition ${
+                    isEditingCards
+                      ? "bg-stone-900 text-white border-stone-900"
+                      : "bg-white text-stone-500 border-stone-200 hover:bg-stone-100"
+                  }`}
+                >
+                  {isEditingCards ? "완료" : "수정"}
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0 pt-1">
             {deployStatus === "synced" && (
               <span
                 title="GitHub 최신 코드가 반영된 상태입니다"
@@ -162,14 +177,16 @@ export default function MainDashboard() {
               href={card.href}
               className={`relative aspect-square rounded-2xl border p-3 flex flex-col items-center justify-center gap-2 shadow-sm hover:scale-[1.02] transition ${card.color}`}
             >
-              <button
-                type="button"
-                onClick={(e) => handleDeleteCard(e, card.id)}
-                className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white/80 text-[10px] text-stone-400 hover:text-rose-600 flex items-center justify-center"
-                aria-label="삭제"
-              >
-                ✕
-              </button>
+              {isEditingCards && (
+                <button
+                  type="button"
+                  onClick={(e) => handleDeleteCard(e, card.id)}
+                  className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white/90 text-[10px] text-rose-500 hover:bg-rose-500 hover:text-white shadow-2xs flex items-center justify-center transition"
+                  aria-label="삭제"
+                >
+                  ✕
+                </button>
+              )}
               <span className="text-3xl">{card.icon}</span>
               <span className="text-xs font-bold text-center break-keep">{card.name}</span>
             </Link>
