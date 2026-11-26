@@ -5,18 +5,18 @@ import Link from "next/link";
 
 interface AttemptRecord {
   id: number;
-  attemptNo: number; // 1: 최초, 2~: 복습
+  attemptNo: number;
   date: string;
   correctScore: string; // 맞춘 점수
   shortAnswerScore: string; // 단답 점수
   wrongScore: string; // 틀린 점수
-  unsolvedScore: string; // 못맞추는 점수
+  unsolvedScore: string; // 어려운 문제
   wrongNumbers: number[]; // 틀린 번호 목록
   repeatedWrongNumbers: number[]; // 이전 풀이에서 틀렸는데 또 틀린 번호
 }
 
 interface ExamGroup {
-  examName: string; // 예: "2025-1"
+  examName: string; // 예: "2026-1"
   attempts: AttemptRecord[];
 }
 
@@ -28,6 +28,25 @@ function parseNumbers(input: string): number[] {
     .map((v) => Number(v.trim()))
     .filter((n) => !Number.isNaN(n) && n > 0);
   return Array.from(new Set(nums)).sort((a, b) => a - b);
+}
+
+// 연도 내림차순(2026 -> 2025), 같은 연도 내 회차 오름차순(1 -> 2 -> 3) 정렬 함수
+function sortExamGroups(groups: ExamGroup[]): ExamGroup[] {
+  return [...groups].sort((a, b) => {
+    const matchA = a.examName.match(/^(\d{4})\D*(\d+)?/);
+    const matchB = b.examName.match(/^(\d{4})\D*(\d+)?/);
+
+    if (matchA && matchB) {
+      const yearA = Number(matchA[1]);
+      const yearB = Number(matchB[1]);
+      if (yearA !== yearB) return yearB - yearA; // 최신 연도 우선
+
+      const roundA = matchA[2] ? Number(matchA[2]) : 0;
+      const roundB = matchB[2] ? Number(matchB[2]) : 0;
+      if (roundA !== roundB) return roundA - roundB; // 1, 2, 3 오름차순
+    }
+    return b.examName.localeCompare(a.examName, "ko", { numeric: true });
+  });
 }
 
 export default function ElectricalEngineerPage() {
@@ -54,7 +73,7 @@ export default function ElectricalEngineerPage() {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed: ExamGroup[] = JSON.parse(saved);
-        setExamGroups(parsed);
+        setExamGroups(sortExamGroups(parsed));
       }
     } catch {
       // 파싱 오류 무시
@@ -62,16 +81,15 @@ export default function ElectricalEngineerPage() {
   }, []);
 
   const saveGroups = (next: ExamGroup[]) => {
-    setExamGroups(next);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    const sorted = sortExamGroups(next);
+    setExamGroups(sorted);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sorted));
   };
 
-  // 현재 입력 중인 시험 이름과 기존 저장된 회차 매칭 (실시간 비교용)
   const normalizedName = examName.trim();
   const existingGroup = examGroups.find((g) => g.examName === normalizedName);
   const currentWrongList = parseNumbers(wrongInput);
 
-  // 기존 풀이에서 한 번이라도 틀렸던 모든 번호 집합
   const pastWrongSet = new Set<number>(
     existingGroup ? existingGroup.attempts.flatMap((a) => a.wrongNumbers) : []
   );
@@ -79,12 +97,11 @@ export default function ElectricalEngineerPage() {
 
   const handleSaveAttempt = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!normalizedName) return alert("시험 이름을 입력해 주세요. (예: 2025-1)");
+    if (!normalizedName) return alert("시험 이름을 입력해 주세요. (예: 2026-1)");
 
     const prevAttempts = existingGroup ? existingGroup.attempts : [];
     const attemptNo = prevAttempts.length + 1;
 
-    // 이전 풀이에서 틀렸던 번호들과 비교하여 또 틀린 번호 추출
     const prevWrongUnion = new Set<number>(
       prevAttempts.flatMap((a) => a.wrongNumbers)
     );
@@ -113,15 +130,14 @@ export default function ElectricalEngineerPage() {
       );
     } else {
       nextGroups = [
-        { examName: normalizedName, attempts: [newAttempt] },
         ...examGroups,
+        { examName: normalizedName, attempts: [newAttempt] },
       ];
     }
 
     saveGroups(nextGroups);
     setOpenExams((prev) => ({ ...prev, [normalizedName]: true }));
 
-    // 입력칸 초기화
     setCorrectScore("");
     setShortAnswerScore("");
     setWrongScore("");
@@ -130,7 +146,7 @@ export default function ElectricalEngineerPage() {
 
     if (attemptNo >= 2) {
       alert(
-        `[${normalizedName}] ${attemptNo}회차(복습) 기록이 누적 저장되었으며, 공부 보드 '저장' 칸에도 반영되었습니다!`
+        `[${normalizedName}] ${attemptNo}회차 기록이 누적 저장되었으며, 공부 보드 '저장' 칸에도 반영되었습니다!`
       );
     } else {
       alert(`[${normalizedName}] 1회차 기록이 저장되었습니다.`);
@@ -162,7 +178,6 @@ export default function ElectricalEngineerPage() {
     saveGroups(next);
   };
 
-  // 복습(2회 이상 응시) 회차 개수
   const reviewGroupCount = examGroups.filter((g) => g.attempts.length >= 2).length;
 
   return (
@@ -195,7 +210,7 @@ export default function ElectricalEngineerPage() {
             <h2 className="text-sm font-extrabold text-stone-900">📝 기출 회차 점수 · 오답 기록</h2>
             {existingGroup && (
               <span className="text-[11px] font-bold bg-sky-100 text-sky-800 px-2.5 py-0.5 rounded-full">
-                복습 {existingGroup.attempts.length + 1}회차 입력 중
+                {existingGroup.attempts.length + 1}회차 입력 중
               </span>
             )}
           </div>
@@ -205,7 +220,7 @@ export default function ElectricalEngineerPage() {
             <label className="block text-[11px] font-bold text-stone-600">시험 이름</label>
             <input
               type="text"
-              placeholder="ex) 2025-1"
+              placeholder="ex) 2026-1"
               value={examName}
               onChange={(e) => setExamName(e.target.value)}
               className="w-full px-3 py-2 text-xs font-extrabold border border-stone-200 rounded-xl bg-stone-50 focus:bg-white focus:outline-none"
@@ -213,7 +228,7 @@ export default function ElectricalEngineerPage() {
             />
           </div>
 
-          {/* 점수 넣는 박스 (맞춘 점수 / 단답 점수 / 틀린 점수 / 못맞추는 점수) */}
+          {/* 점수 넣는 박스 (맞춘 점수: 초록 / 단답 점수: 검정 / 틀린 점수: 파랑 / 어려운 문제: 빨강) */}
           <div className="space-y-1">
             <label className="block text-[11px] font-bold text-stone-600">점수 기록</label>
             <div className="grid grid-cols-4 gap-1.5">
@@ -224,40 +239,40 @@ export default function ElectricalEngineerPage() {
                   placeholder="0"
                   value={correctScore}
                   onChange={(e) => setCorrectScore(e.target.value)}
-                  className="w-full bg-white border border-emerald-200 rounded-lg px-2 py-1 text-xs font-extrabold text-center text-emerald-900 focus:outline-none"
+                  className="w-full bg-white border border-emerald-200 rounded-lg px-2 py-1 text-xs font-extrabold text-center text-emerald-700 focus:outline-none"
                 />
               </div>
 
-              <div className="bg-sky-50/70 border border-sky-200 rounded-xl p-2">
-                <span className="block text-[10px] font-bold text-sky-800 mb-1">단답 점수</span>
+              <div className="bg-stone-100 border border-stone-200 rounded-xl p-2">
+                <span className="block text-[10px] font-bold text-stone-800 mb-1">단답 점수</span>
                 <input
                   type="number"
                   placeholder="0"
                   value={shortAnswerScore}
                   onChange={(e) => setShortAnswerScore(e.target.value)}
-                  className="w-full bg-white border border-sky-200 rounded-lg px-2 py-1 text-xs font-extrabold text-center text-sky-900 focus:outline-none"
+                  className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs font-extrabold text-center text-stone-900 focus:outline-none"
                 />
               </div>
 
-              <div className="bg-rose-50/70 border border-rose-200 rounded-xl p-2">
-                <span className="block text-[10px] font-bold text-rose-800 mb-1">틀린 점수</span>
+              <div className="bg-sky-50/70 border border-sky-200 rounded-xl p-2">
+                <span className="block text-[10px] font-bold text-sky-800 mb-1">틀린 점수</span>
                 <input
                   type="number"
                   placeholder="0"
                   value={wrongScore}
                   onChange={(e) => setWrongScore(e.target.value)}
-                  className="w-full bg-white border border-rose-200 rounded-lg px-2 py-1 text-xs font-extrabold text-center text-rose-900 focus:outline-none"
+                  className="w-full bg-white border border-sky-200 rounded-lg px-2 py-1 text-xs font-extrabold text-center text-sky-600 focus:outline-none"
                 />
               </div>
 
-              <div className="bg-stone-100 border border-stone-200 rounded-xl p-2">
-                <span className="block text-[10px] font-bold text-stone-700 mb-1">못맞추는 점수</span>
+              <div className="bg-rose-50/70 border border-rose-200 rounded-xl p-2">
+                <span className="block text-[10px] font-bold text-rose-800 mb-1">어려운 문제</span>
                 <input
                   type="number"
                   placeholder="0"
                   value={unsolvedScore}
                   onChange={(e) => setUnsolvedScore(e.target.value)}
-                  className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs font-extrabold text-center text-stone-800 focus:outline-none"
+                  className="w-full bg-white border border-rose-200 rounded-lg px-2 py-1 text-xs font-extrabold text-center text-rose-600 focus:outline-none"
                 />
               </div>
             </div>
@@ -276,7 +291,6 @@ export default function ElectricalEngineerPage() {
               className="w-full px-3 py-2 text-xs font-bold border border-stone-200 rounded-xl bg-stone-50 focus:bg-white focus:outline-none"
             />
 
-            {/* 기존 동일 회차 기록이 있을 때 실시간 오답 비교 미리보기 */}
             {existingGroup && (
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-1.5 text-xs">
                 <p className="font-extrabold text-amber-950">
@@ -293,7 +307,7 @@ export default function ElectricalEngineerPage() {
                 </p>
                 {liveRepeatedList.length > 0 ? (
                   <p className="text-[11px] font-extrabold text-rose-600">
-                    ⚠️ 이번에 또 틀린 번호: {liveRepeatedList.map((n) => `${n}번`).join(", ")}
+                    ⚠️ 중복 오답 번호: {liveRepeatedList.map((n) => `${n}번`).join(", ")}
                   </p>
                 ) : (
                   currentWrongList.length > 0 && (
@@ -311,12 +325,12 @@ export default function ElectricalEngineerPage() {
             className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-extrabold rounded-xl shadow-xs transition"
           >
             {existingGroup
-              ? `저장하기 (${existingGroup.attempts.length + 1}회차 복습 누적 → 공부 보드 '저장' 연동)`
+              ? `저장하기 (${existingGroup.attempts.length + 1}회차 누적 → 공부 보드 '저장' 연동)`
               : "저장하기 (1회차 등록)"}
           </button>
         </form>
 
-        {/* 2. 실시간 누적된 회차 목록 (삼각형 ▼/▲ 토글로 세부 횟수·점수·중복 오답 확인) */}
+        {/* 2. 실시간 누적된 회차 목록 (2026-1,2,3 -> 2025-1,2,3 순) */}
         <section className="space-y-2.5">
           <div className="flex items-center justify-between px-1">
             <h2 className="text-xs font-extrabold text-stone-700">
@@ -327,25 +341,13 @@ export default function ElectricalEngineerPage() {
           {examGroups.length === 0 ? (
             <div className="bg-white border border-dashed border-stone-300 rounded-2xl p-8 text-center text-xs text-stone-400">
               아직 저장된 시험 회차가 없습니다.
-              <br />위 박스에 시험 이름(ex. 2025-1)과 점수를 입력해 저장해 보세요!
+              <br />위 박스에 시험 이름(ex. 2026-1)과 점수를 입력해 저장해 보세요!
             </div>
           ) : (
             <div className="space-y-2.5">
               {examGroups.map((group) => {
                 const isOpen = !!openExams[group.examName];
                 const latest = group.attempts[group.attempts.length - 1];
-
-                // 해당 회차 전체 풀이에서 각 문제 번호별 틀린 누적 횟수 계산
-                const freqMap: Record<number, number> = {};
-                group.attempts.forEach((att) => {
-                  att.wrongNumbers.forEach((num) => {
-                    freqMap[num] = (freqMap[num] || 0) + 1;
-                  });
-                });
-                const repeatedEntries = Object.entries(freqMap)
-                  .map(([num, count]) => ({ num: Number(num), count }))
-                  .filter((item) => item.count >= 2)
-                  .sort((a, b) => b.count - a.count || a.num - b.num);
 
                 return (
                   <div
@@ -388,116 +390,89 @@ export default function ElectricalEngineerPage() {
                       </div>
                     </div>
 
-                    {/* 삼각형 클릭 시 펼쳐지는 세부 횟수, 점수, 중복 오답 누적 내역 */}
+                    {/* 삼각형 클릭 시 펼쳐지는 회차별 세부 내역 */}
                     {isOpen && (
-                      <div className="px-4 pb-4 pt-2 border-t border-stone-100 bg-stone-50/70 space-y-3">
-                        {/* 반복해서 또 틀린 번호 요약 카드 */}
-                        <div className="bg-white border border-rose-200/80 rounded-xl p-3 space-y-1.5">
-                          <p className="text-[11px] font-extrabold text-rose-700">
-                            🔁 반복해서 또 틀린 번호 (2회 이상 오답)
-                          </p>
-                          {repeatedEntries.length === 0 ? (
-                            <p className="text-xs text-stone-500">
-                              아직 2회 이상 중복으로 틀린 번호가 없습니다.
-                            </p>
-                          ) : (
-                            <div className="flex flex-wrap gap-1.5">
-                              {repeatedEntries.map((item) => (
+                      <div className="px-4 pb-4 pt-2 border-t border-stone-100 bg-stone-50/70 space-y-2">
+                        {group.attempts.map((att) => (
+                          <div
+                            key={att.id}
+                            className="bg-white border border-stone-200 rounded-xl p-3 space-y-2"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-1.5">
                                 <span
-                                  key={item.num}
-                                  className="inline-flex items-center gap-1 text-xs font-extrabold bg-rose-50 text-rose-700 border border-rose-200 px-2.5 py-1 rounded-lg"
+                                  className={`text-[11px] font-extrabold px-2 py-0.5 rounded-md ${
+                                    att.attemptNo === 1
+                                      ? "bg-stone-800 text-white"
+                                      : "bg-sky-600 text-white"
+                                  }`}
                                 >
-                                  {item.num}번
-                                  <span className="text-[10px] bg-rose-600 text-white px-1.5 py-0.2 rounded-full">
-                                    {item.count}회 틀림
-                                  </span>
+                                  {att.attemptNo}회차
                                 </span>
-                              ))}
+                                <span className="text-[11px] text-stone-400">{att.date}</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteSingleAttempt(group.examName, att.id)}
+                                className="text-[11px] text-stone-400 hover:text-rose-500"
+                              >
+                                차수 삭제
+                              </button>
                             </div>
-                          )}
-                        </div>
 
-                        {/* 회차별 세부 점수 & 틀린 번호 히스토리 */}
-                        <div className="space-y-2">
-                          {group.attempts.map((att) => (
-                            <div
-                              key={att.id}
-                              className="bg-white border border-stone-200 rounded-xl p-3 space-y-2"
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-1.5">
-                                  <span
-                                    className={`text-[11px] font-extrabold px-2 py-0.5 rounded-md ${
-                                      att.attemptNo === 1
-                                        ? "bg-stone-800 text-white"
-                                        : "bg-sky-600 text-white"
-                                    }`}
-                                  >
-                                    {att.attemptNo}회차 {att.attemptNo >= 2 ? "(복습)" : "(최초)"}
-                                  </span>
-                                  <span className="text-[11px] text-stone-400">{att.date}</span>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteSingleAttempt(group.examName, att.id)}
-                                  className="text-[11px] text-stone-400 hover:text-rose-500"
-                                >
-                                  차수 삭제
-                                </button>
+                            {/* 4종 세부 점수 */}
+                            <div className="grid grid-cols-4 gap-1.5 text-center bg-stone-50 p-2 rounded-lg text-[11px]">
+                              <div>
+                                <span className="block text-[10px] text-stone-400">맞춘 점수</span>
+                                <strong className="text-emerald-700">{att.correctScore}점</strong>
                               </div>
-
-                              {/* 4종 세부 점수 */}
-                              <div className="grid grid-cols-4 gap-1.5 text-center bg-stone-50 p-2 rounded-lg text-[11px]">
-                                <div>
-                                  <span className="block text-[10px] text-stone-400">맞춘 점수</span>
-                                  <strong className="text-emerald-700">{att.correctScore}점</strong>
-                                </div>
-                                <div>
-                                  <span className="block text-[10px] text-stone-400">단답 점수</span>
-                                  <strong className="text-sky-700">{att.shortAnswerScore}점</strong>
-                                </div>
-                                <div>
-                                  <span className="block text-[10px] text-stone-400">틀린 점수</span>
-                                  <strong className="text-rose-600">{att.wrongScore}점</strong>
-                                </div>
-                                <div>
-                                  <span className="block text-[10px] text-stone-400">못맞추는 점수</span>
-                                  <strong className="text-stone-700">{att.unsolvedScore}점</strong>
-                                </div>
+                              <div>
+                                <span className="block text-[10px] text-stone-400">단답 점수</span>
+                                <strong className="text-stone-900">{att.shortAnswerScore}점</strong>
                               </div>
-
-                              {/* 해당 차수 틀린 번호 및 또 틀린 번호 강조 */}
-                              <div className="space-y-1">
-                                <p className="text-[11px] font-bold text-stone-600">
-                                  틀린 번호 ({att.wrongNumbers.length}개):
-                                </p>
-                                {att.wrongNumbers.length === 0 ? (
-                                  <span className="text-[11px] text-emerald-600 font-bold">
-                                    만점! 틀린 번호 없음
-                                  </span>
-                                ) : (
-                                  <div className="flex flex-wrap gap-1">
-                                    {att.wrongNumbers.map((num) => {
-                                      const isRepeated = att.repeatedWrongNumbers.includes(num);
-                                      return (
-                                        <span
-                                          key={num}
-                                          className={`text-[11px] font-bold px-2 py-0.5 rounded-md border ${
-                                            isRepeated
-                                              ? "bg-rose-600 text-white border-rose-600"
-                                              : "bg-stone-100 text-stone-700 border-stone-200"
-                                          }`}
-                                        >
-                                          {num}번{isRepeated ? " (또 틀림)" : ""}
-                                        </span>
-                                      );
-                                    })}
-                                  </div>
-                                )}
+                              <div>
+                                <span className="block text-[10px] text-stone-400">틀린 점수</span>
+                                <strong className="text-sky-600">{att.wrongScore}점</strong>
+                              </div>
+                              <div>
+                                <span className="block text-[10px] text-stone-400">어려운 문제</span>
+                                <strong className="text-rose-600">{att.unsolvedScore}점</strong>
                               </div>
                             </div>
-                          ))}
-                        </div>
+
+                            {/* 틀린 번호 (2회차 이상에서 또 틀린 번호는 연한 빨간 계열 색상으로만 강조) */}
+                            <div className="space-y-1">
+                              <p className="text-[11px] font-bold text-stone-600">
+                                틀린 번호 ({att.wrongNumbers.length}개):
+                              </p>
+                              {att.wrongNumbers.length === 0 ? (
+                                <span className="text-[11px] text-emerald-600 font-bold">
+                                  만점! 틀린 번호 없음
+                                </span>
+                              ) : (
+                                <div className="flex flex-wrap gap-1">
+                                  {att.wrongNumbers.map((num) => {
+                                    const isRepeated =
+                                      att.attemptNo >= 2 &&
+                                      att.repeatedWrongNumbers.includes(num);
+                                    return (
+                                      <span
+                                        key={num}
+                                        className={`text-[11px] font-bold px-2 py-0.5 rounded-md border ${
+                                          isRepeated
+                                            ? "bg-rose-100 text-rose-700 border-rose-200"
+                                            : "bg-stone-100 text-stone-700 border-stone-200"
+                                        }`}
+                                      >
+                                        {num}번
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
