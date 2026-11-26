@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import PomodoroBox from "./components/PomodoroBox";
 
 interface CategoryCard {
   id: string;
@@ -24,7 +25,6 @@ export default function MainDashboard() {
   const [cards, setCards] = useState<CategoryCard[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [isEditingCards, setIsEditingCards] = useState(false);
-
   const [deployStatus, setDeployStatus] = useState<DeployStatus>("synced");
   const loadedShaRef = useRef<string | null>(null);
 
@@ -33,17 +33,16 @@ export default function MainDashboard() {
       const saved = localStorage.getItem("kwan_dashboard_cards");
       if (saved) setCards(JSON.parse(saved));
     } catch {
-      // 저장 데이터 파싱 실패 시 무시
+      // 무시
     }
   }, []);
 
   useEffect(() => {
     const checkDeployStatus = async () => {
       try {
-        const res = await fetch(
-          "https://api.github.com/repos/IOOi968/kd-trip/commits/main",
-          { cache: "no-store" }
-        );
+        const res = await fetch("https://api.github.com/repos/IOOi968/kd-trip/commits/main", {
+          cache: "no-store",
+        });
         if (!res.ok) return;
         const data = await res.json();
         const latestSha: string = data.sha;
@@ -52,28 +51,17 @@ export default function MainDashboard() {
 
         const commitTime = commitDateStr ? new Date(commitDateStr).getTime() : 0;
         const elapsedMs = Date.now() - commitTime;
-        const BUILD_DURATION_MS = 75000;
+        const BUILD_MS = 75000;
 
-        if (!loadedShaRef.current) {
-          loadedShaRef.current = latestSha;
-        }
+        if (!loadedShaRef.current) loadedShaRef.current = latestSha;
 
         if (latestSha !== loadedShaRef.current) {
-          if (elapsedMs < BUILD_DURATION_MS) {
-            setDeployStatus("building");
-          } else {
-            setDeployStatus("ready");
-          }
+          setDeployStatus(elapsedMs < BUILD_MS ? "building" : "ready");
           return;
         }
-
-        if (commitTime && elapsedMs < BUILD_DURATION_MS) {
-          setDeployStatus("building");
-        } else {
-          setDeployStatus("synced");
-        }
+        setDeployStatus(commitTime && elapsedMs < BUILD_MS ? "building" : "synced");
       } catch {
-        // 네트워크 일시 오류 무시
+        // 무시
       }
     };
 
@@ -89,8 +77,7 @@ export default function MainDashboard() {
 
   const handleAddCategory = (item: Omit<CategoryCard, "id">) => {
     if (cards.length >= 6) return;
-    const next = [...cards, { ...item, id: String(Date.now()) }];
-    saveCards(next);
+    saveCards([...cards, { ...item, id: String(Date.now()) }]);
     setIsAdding(false);
   };
 
@@ -107,14 +94,11 @@ export default function MainDashboard() {
   return (
     <div className="min-h-screen bg-stone-50 text-stone-800 px-4 py-8">
       <div className="max-w-md mx-auto space-y-6">
-        {/* 상단 헤더 */}
         <header className="flex items-start justify-between gap-2">
           <div>
             <h1 className="text-2xl font-extrabold text-stone-900">나의 라이프 보드</h1>
             <div className="flex items-center gap-2 mt-1">
-              <p className="text-xs text-stone-500">
-                나만의 홈을 구성하세요 ({cards.length}/6)
-              </p>
+              <p className="text-xs text-stone-500">나만의 홈을 구성하세요 ({cards.length}/6)</p>
               {cards.length > 0 && (
                 <button
                   type="button"
@@ -133,43 +117,33 @@ export default function MainDashboard() {
 
           <div className="flex items-center gap-1.5 shrink-0 pt-1">
             {deployStatus === "synced" && (
-              <span
-                title="GitHub 최신 코드가 반영된 상태입니다"
-                className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-1 rounded-full"
-              >
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-1 rounded-full">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                 최신
               </span>
             )}
-
             {deployStatus === "building" && (
-              <span
-                title="GitHub 수정 감지! Vercel에서 반영 중입니다..."
-                className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 rounded-full animate-pulse"
-              >
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 rounded-full animate-pulse">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                 반영중
               </span>
             )}
-
             {deployStatus === "ready" && (
               <button
                 type="button"
                 onClick={() => window.location.reload()}
-                className="inline-flex items-center gap-1 text-[10px] font-bold bg-sky-600 text-white px-2 py-1 rounded-full shadow-xs hover:bg-sky-700 transition"
+                className="inline-flex items-center gap-1 text-[10px] font-bold bg-sky-600 text-white px-2 py-1 rounded-full shadow-xs"
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
                 적용됨 ↻
               </button>
             )}
-
             <span className="text-[11px] font-bold bg-stone-900 text-white px-2.5 py-1 rounded-full">
               MY HOME
             </span>
           </div>
         </header>
 
-        {/* 3x2 동적 그리드 보드 */}
         <section className="grid grid-cols-3 gap-3">
           {cards.map((card) => (
             <Link
@@ -181,8 +155,7 @@ export default function MainDashboard() {
                 <button
                   type="button"
                   onClick={(e) => handleDeleteCard(e, card.id)}
-                  className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white/90 text-[10px] text-rose-500 hover:bg-rose-500 hover:text-white shadow-2xs flex items-center justify-center transition"
-                  aria-label="삭제"
+                  className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white/90 text-[10px] text-rose-500 hover:bg-rose-500 hover:text-white flex items-center justify-center"
                 >
                   ✕
                 </button>
@@ -204,20 +177,14 @@ export default function MainDashboard() {
           )}
         </section>
 
-        {/* + 버튼 클릭 시 열리는 카테고리 선택 창 */}
         {isAdding && (
           <div className="bg-white border border-stone-200 rounded-2xl p-4 shadow-md space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-bold text-stone-800">카테고리 선택</h2>
-              <button
-                type="button"
-                onClick={() => setIsAdding(false)}
-                className="text-xs text-stone-400"
-              >
+              <button type="button" onClick={() => setIsAdding(false)} className="text-xs text-stone-400">
                 닫기 ✕
               </button>
             </div>
-
             <div className="grid grid-cols-3 gap-2">
               {AVAILABLE_CATEGORIES.map((item) => {
                 const alreadyAdded = cards.some((c) => c.name === item.name);
@@ -227,7 +194,7 @@ export default function MainDashboard() {
                     type="button"
                     disabled={alreadyAdded}
                     onClick={() => handleAddCategory(item)}
-                    className="py-3 px-2 rounded-xl border border-stone-200 bg-stone-50 hover:bg-stone-100 disabled:opacity-40 text-xs font-bold flex flex-col items-center gap-1.5 transition"
+                    className="py-3 px-2 rounded-xl border border-stone-200 bg-stone-50 hover:bg-stone-100 disabled:opacity-40 text-xs font-bold flex flex-col items-center gap-1.5"
                   >
                     <span className="text-2xl">{item.icon}</span>
                     <span>{item.name}</span>
@@ -237,6 +204,8 @@ export default function MainDashboard() {
             </div>
           </div>
         )}
+
+        <PomodoroBox />
       </div>
     </div>
   );
