@@ -46,7 +46,7 @@ export default function StudyPlannerPage() {
   const [sheets, setSheets] = useState<Record<string, DaySheet>>({});
   const [timeRecords, setTimeRecords] = useState<Record<string, DayTimeRecord>>({});
 
-  // 시간 설정 모달 상태 (뒷배경 어둡게 + 시/분/초 - 시/분/초 입력)
+  // 모달 상태 (뒷배경 어둡게 + 시:분:초 ~ 시:분:초 입력)
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRangeId, setEditingRangeId] = useState<string | null>(null);
   const [startH, setStartH] = useState("9");
@@ -67,6 +67,12 @@ export default function StudyPlannerPage() {
       // 무시
     }
     setTimeRecords(loadTimeRecords());
+
+    // 뽀모도로·공부타이머가 켜져 있을 때 실시간으로 게이지가 차오르도록 1초마다 동기화
+    const syncTimer = setInterval(() => {
+      setTimeRecords(loadTimeRecords());
+    }, 1000);
+    return () => clearInterval(syncTimer);
   }, []);
 
   const currentSheet: DaySheet = sheets[selectedDate] || {
@@ -92,7 +98,7 @@ export default function StudyPlannerPage() {
     saveSheet({ ...currentSheet, lines: nextLines });
   };
 
-  // 타임테이블 칸 클릭 시 시간 설정 박스 열기 (이미 해당 칸에 기록이 있으면 수정 모드로 열림)
+  // 격자 클릭 시 바로 칠하지 않고 시:분:초 입력 팝업 열기
   const handleOpenTimeModal = (hour: number, slotIdx: number) => {
     const slotStart = hmsToOffsetSec(hour, slotIdx * 10, 0);
     const slotEnd = slotStart + 600;
@@ -127,7 +133,6 @@ export default function StudyPlannerPage() {
     setIsModalOpen(true);
   };
 
-  // 입력한 시·분·초 - 시·분·초 구간 저장 및 반영
   const handleApplyTimeRange = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDate) return;
@@ -144,7 +149,7 @@ export default function StudyPlannerPage() {
     );
 
     if (eSec <= sSec) {
-      alert("종료 시간은 시작 시간보다 뒤여야 합니다. (기준: 오전 5시 ~ 새벽 4시 59분)");
+      alert("종료 시간은 시작 시간보다 뒤여야 합니다.");
       return;
     }
 
@@ -172,7 +177,6 @@ export default function StudyPlannerPage() {
     setIsModalOpen(false);
   };
 
-  // 기존 구간 삭제
   const handleDeleteRange = (id: string) => {
     const nextRanges = currentTime.ranges.filter((r) => r.id !== id);
     const nextRecords = {
@@ -211,7 +215,6 @@ export default function StudyPlannerPage() {
 
       <main className="max-w-md mx-auto px-3 pt-4">
         <div className="bg-white border border-stone-300 rounded-xl shadow-xs overflow-hidden">
-          {/* 상단 goal 줄 & 날짜 선택 */}
           <div className="flex items-center justify-between px-3 py-2.5 border-b-2 border-stone-400">
             <div className="flex items-center gap-2 flex-1">
               <span className="text-sm font-extrabold text-stone-700 tracking-tight">goal</span>
@@ -231,7 +234,6 @@ export default function StudyPlannerPage() {
             />
           </div>
 
-          {/* 24줄 본문: 왼쪽 할일 줄 + 오른쪽 타임테이블 (왼쪽 -> 오른쪽 게이지 차오름) */}
           <div className="divide-y divide-stone-300">
             {HOURS_ORDER.map((item, idx) => {
               const line = currentSheet.lines[idx] || { done: false, text: "" };
@@ -256,7 +258,7 @@ export default function StudyPlannerPage() {
                     />
                   </div>
 
-                  {/* 오른쪽 타임테이블: 각 10분 칸 내부가 왼쪽에서 오른쪽으로 차오름 */}
+                  {/* 오른쪽 타임테이블: 초 단위로 왼쪽 -> 오른쪽으로 게이지가 차오름 */}
                   <div className="col-span-5 grid grid-cols-7 items-stretch">
                     <span className="flex items-center justify-center text-[10px] font-bold text-stone-600 bg-stone-50 border-r border-stone-300">
                       {item.label}
@@ -294,11 +296,10 @@ export default function StudyPlannerPage() {
             })}
           </div>
 
-          {/* 맨 아래 total __ h __ m 집계 칸 */}
           <div className="grid grid-cols-12 border-t-2 border-stone-400 bg-stone-50/60">
             <div className="col-span-7 border-r border-stone-400 px-3 py-3 flex items-center">
               <span className="text-[10px] text-stone-400">
-                격자 칸을 누르면 시간을 직접 입력·수정할 수 있어요
+                격자 칸을 누르면 시·분·초 구간을 입력·수정할 수 있어요
               </span>
             </div>
             <div className="col-span-5 px-3 py-2.5 flex flex-col justify-between">
@@ -316,7 +317,7 @@ export default function StudyPlannerPage() {
         </div>
       </main>
 
-      {/* 격자 클릭 시 뒷배경 어둡게 + 시·분·초 - 시·분·초 시간 설정 박스 */}
+      {/* 격자 클릭 시 뒷배경 어둡게 + 시:분:초 ~ 시:분:초 설정 팝업 */}
       {isModalOpen && (
         <div
           onClick={() => setIsModalOpen(false)}
@@ -328,7 +329,7 @@ export default function StudyPlannerPage() {
           >
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-extrabold text-stone-900">
-                ⏱️ {editingRangeId ? "공부 시간 구간 수정" : "공부 시간 직접 입력"}
+                ⏱️ {editingRangeId ? "공부 시간 수정" : "공부 시간 입력"}
               </h2>
               <button
                 type="button"
@@ -339,11 +340,10 @@ export default function StudyPlannerPage() {
               </button>
             </div>
 
-            <form onSubmit={handleApplyTimeRange} className="space-y-3.5">
-              {/* 시작 시간: 시 분 초 */}
+            <form onSubmit={handleApplyTimeRange} className="space-y-3">
               <div className="bg-stone-50 border border-stone-200 rounded-xl p-3 space-y-1.5">
-                <span className="block text-[11px] font-bold text-stone-500">시작 시간</span>
-                <div className="grid grid-cols-3 gap-1.5 items-center">
+                <span className="block text-[11px] font-bold text-stone-500">시작 (시 : 분 : 초)</span>
+                <div className="grid grid-cols-3 gap-1.5">
                   <div className="flex items-center gap-1">
                     <input
                       type="number"
@@ -353,7 +353,7 @@ export default function StudyPlannerPage() {
                       onChange={(e) => setStartH(e.target.value)}
                       className="w-full bg-white border border-stone-300 rounded-lg py-1.5 text-xs font-extrabold text-center"
                     />
-                    <span className="text-[11px] font-bold text-stone-600">시</span>
+                    <span className="text-[11px] font-bold">시</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <input
@@ -364,7 +364,7 @@ export default function StudyPlannerPage() {
                       onChange={(e) => setStartM(e.target.value)}
                       className="w-full bg-white border border-stone-300 rounded-lg py-1.5 text-xs font-extrabold text-center"
                     />
-                    <span className="text-[11px] font-bold text-stone-600">분</span>
+                    <span className="text-[11px] font-bold">분</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <input
@@ -375,17 +375,14 @@ export default function StudyPlannerPage() {
                       onChange={(e) => setStartS(e.target.value)}
                       className="w-full bg-white border border-stone-300 rounded-lg py-1.5 text-xs font-extrabold text-center"
                     />
-                    <span className="text-[11px] font-bold text-stone-600">초</span>
+                    <span className="text-[11px] font-bold">초</span>
                   </div>
                 </div>
               </div>
 
-              <div className="text-center text-xs font-extrabold text-stone-400">~</div>
-
-              {/* 종료 시간: 시 분 초 */}
               <div className="bg-stone-50 border border-stone-200 rounded-xl p-3 space-y-1.5">
-                <span className="block text-[11px] font-bold text-stone-500">종료 시간</span>
-                <div className="grid grid-cols-3 gap-1.5 items-center">
+                <span className="block text-[11px] font-bold text-stone-500">종료 (시 : 분 : 초)</span>
+                <div className="grid grid-cols-3 gap-1.5">
                   <div className="flex items-center gap-1">
                     <input
                       type="number"
@@ -395,7 +392,7 @@ export default function StudyPlannerPage() {
                       onChange={(e) => setEndH(e.target.value)}
                       className="w-full bg-white border border-stone-300 rounded-lg py-1.5 text-xs font-extrabold text-center"
                     />
-                    <span className="text-[11px] font-bold text-stone-600">시</span>
+                    <span className="text-[11px] font-bold">시</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <input
@@ -406,7 +403,7 @@ export default function StudyPlannerPage() {
                       onChange={(e) => setEndM(e.target.value)}
                       className="w-full bg-white border border-stone-300 rounded-lg py-1.5 text-xs font-extrabold text-center"
                     />
-                    <span className="text-[11px] font-bold text-stone-600">분</span>
+                    <span className="text-[11px] font-bold">분</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <input
@@ -417,7 +414,7 @@ export default function StudyPlannerPage() {
                       onChange={(e) => setEndS(e.target.value)}
                       className="w-full bg-white border border-stone-300 rounded-lg py-1.5 text-xs font-extrabold text-center"
                     />
-                    <span className="text-[11px] font-bold text-stone-600">초</span>
+                    <span className="text-[11px] font-bold">초</span>
                   </div>
                 </div>
               </div>
@@ -427,24 +424,23 @@ export default function StudyPlannerPage() {
                   <button
                     type="button"
                     onClick={() => handleDeleteRange(editingRangeId)}
-                    className="px-3.5 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-xs font-extrabold rounded-xl"
+                    className="px-3.5 py-2.5 bg-rose-50 text-rose-600 border border-rose-200 text-xs font-extrabold rounded-xl"
                   >
-                    구간 삭제
+                    삭제
                   </button>
                 )}
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl transition"
+                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold rounded-xl"
                 >
-                  스터디플래너에 적용하기
+                  적용하기
                 </button>
               </div>
             </form>
 
-            {/* 오늘 기록된 전체 시간 구간 리스트 (한눈에 확인 & 삭제) */}
             {currentTime.ranges.length > 0 && (
               <div className="pt-2 border-t border-stone-100 space-y-1.5">
-                <p className="text-[11px] font-bold text-stone-500">오늘 기록된 시간 구간</p>
+                <p className="text-[11px] font-bold text-stone-500">오늘 적용된 시간 목록</p>
                 <div className="max-h-28 overflow-y-auto space-y-1">
                   {currentTime.ranges.map((r) => {
                     const s = offsetSecToHms(r.startSec);
