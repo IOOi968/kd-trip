@@ -139,7 +139,7 @@ export default function TodoPage() {
     }, 350);
   };
 
-  // 롱프레스 대기 중 손가락/마우스가 크게 움직이면 롱프레스 취소(일반 스크롤 허용)
+  // 롱프레스 대기 중 손가락/마우스가 크게 움직이면 롱프레스 취소(일반 좌우 슬라이드 허용)
   const handlePresetPointerMoveCancelCheck = (e: React.PointerEvent) => {
     if (!longPressTimerRef.current || !pressStartPosRef.current) return;
     const dx = Math.abs(e.clientX - pressStartPosRef.current.x);
@@ -149,14 +149,13 @@ export default function TodoPage() {
     }
   };
 
-  // 순서 이동 모드 중 포인터가 다른 프리셋 위로 지나가면 위치 즉시 교환
+  // 순서 이동 모드 중 포인터(터치/마우스)가 다른 프리셋 위로 지나가면 위치 즉시 교환
   useEffect(() => {
     if (!reorderingPreset || !reorderSource) return;
 
     const movePresetToTarget = (fromName: string, toName: string) => {
       if (fromName === toName || toName === "전체") return;
       setPresets((prev) => {
-        // '일반'이 presets 배열에 아직 없으면 맨 앞에 포함시킨 뒤 이동
         const base = prev.includes("일반") ? [...prev] : ["일반", ...prev];
         const fromIdx = base.indexOf(fromName);
         const toIdx = base.indexOf(toName);
@@ -170,9 +169,8 @@ export default function TodoPage() {
       });
     };
 
-    const handleGlobalPointerMove = (e: PointerEvent) => {
-      e.preventDefault();
-      const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+    const handleMoveAtPoint = (clientX: number, clientY: number) => {
+      const el = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
       const chip = el?.closest(`[data-preset-zone="${reorderSource}"]`) as HTMLElement | null;
       const hoveredName = chip?.getAttribute("data-preset-name");
       if (hoveredName && hoveredName !== reorderingPreset) {
@@ -180,22 +178,42 @@ export default function TodoPage() {
       }
     };
 
-    const handleGlobalPointerUp = () => {
+    const handleGlobalPointerMove = (e: PointerEvent) => {
+      e.preventDefault();
+      handleMoveAtPoint(e.clientX, e.clientY);
+    };
+
+    const handleGlobalTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      if (touch) {
+        handleMoveAtPoint(touch.clientX, touch.clientY);
+      }
+    };
+
+    const handleGlobalEnd = () => {
       clearLongPressTimer();
       setReorderingPreset(null);
       setReorderSource(null);
       setTimeout(() => {
         didReorderRef.current = false;
-      }, 50);
+      }, 60);
     };
 
     window.addEventListener("pointermove", handleGlobalPointerMove, { passive: false });
-    window.addEventListener("pointerup", handleGlobalPointerUp);
-    window.addEventListener("pointercancel", handleGlobalPointerUp);
+    window.addEventListener("touchmove", handleGlobalTouchMove, { passive: false });
+    window.addEventListener("pointerup", handleGlobalEnd);
+    window.addEventListener("pointercancel", handleGlobalEnd);
+    window.addEventListener("touchend", handleGlobalEnd);
+    window.addEventListener("touchcancel", handleGlobalEnd);
+
     return () => {
       window.removeEventListener("pointermove", handleGlobalPointerMove);
-      window.removeEventListener("pointerup", handleGlobalPointerUp);
-      window.removeEventListener("pointercancel", handleGlobalPointerUp);
+      window.removeEventListener("touchmove", handleGlobalTouchMove);
+      window.removeEventListener("pointerup", handleGlobalEnd);
+      window.removeEventListener("pointercancel", handleGlobalEnd);
+      window.removeEventListener("touchend", handleGlobalEnd);
+      window.removeEventListener("touchcancel", handleGlobalEnd);
     };
   }, [reorderingPreset, reorderSource]);
 
@@ -364,6 +382,9 @@ export default function TodoPage() {
       draggedMoved.current = false;
     }, 0);
   };
+
+  const isBottomReordering =
+    reorderingPreset !== null && reorderSource === "bottom";
 
   return (
     <div className="min-h-screen bg-stone-50 text-stone-800 pb-16 overflow-x-hidden">
@@ -541,7 +562,7 @@ export default function TodoPage() {
           </button>
         </form>
 
-        {/* 한 줄 좌우 드래그 & 꾹 눌러서 순서 이동 가능한 필터 바 + 항목 목록 */}
+        {/* 평소엔 한 줄 좌우 슬라이드, 꾹 누를 때만 위쪽 프리셋 칸처럼 펼쳐져 순서 이동 */}
         <section className="space-y-2.5 min-w-0">
           <div
             ref={filterBarRef}
@@ -549,7 +570,11 @@ export default function TodoPage() {
             onMouseMove={onFilterMouseMove}
             onMouseUp={stopFilterDrag}
             onMouseLeave={stopFilterDrag}
-            className="w-full max-w-full flex flex-nowrap items-center gap-1.5 overflow-x-auto pb-1 cursor-grab active:cursor-grabbing select-none"
+            className={
+              isBottomReordering
+                ? "w-full max-w-full bg-white border border-amber-300 rounded-2xl p-3 shadow-sm flex flex-wrap items-center gap-1.5 select-none touch-none"
+                : "w-full max-w-full flex flex-nowrap items-center gap-1.5 overflow-x-auto pb-1 cursor-grab active:cursor-grabbing select-none"
+            }
           >
             {filterTabs.map((tab) => {
               const active = viewPreset === tab;
@@ -577,7 +602,7 @@ export default function TodoPage() {
                   }}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition shrink-0 whitespace-nowrap ${
                     isBeingMoved
-                      ? "bg-amber-400 text-stone-950 border-amber-600 scale-105 shadow-md ring-2 ring-amber-300 z-10"
+                      ? "bg-amber-300 text-amber-950 border-amber-500 scale-105 shadow-md ring-2 ring-amber-300 z-10"
                       : active
                       ? "bg-stone-900 text-white border-stone-900"
                       : "bg-white text-stone-600 border-stone-200 hover:bg-stone-100"
