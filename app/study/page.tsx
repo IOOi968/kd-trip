@@ -33,17 +33,11 @@ const QUICK_MENUS = [
 ];
 
 export default function StudyPage() {
-  const getTodayStr = () => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
-      now.getDate()
-    ).padStart(2, "0")}`;
-  };
-
-  const todayStr = getTodayStr();
-  const [selectedDate, setSelectedDate] = useState(todayStr);
-  const [viewYear, setViewYear] = useState(new Date().getFullYear());
-  const [viewMonth, setViewMonth] = useState(new Date().getMonth());
+  // Next.js 16 빌드 통과를 위해 초기값은 정적으로 두고 useEffect에서 오늘 날짜 세팅
+  const [todayStr, setTodayStr] = useState("");
+  const [selectedDate, setSelectedDate] = useState("");
+  const [viewYear, setViewYear] = useState(2026);
+  const [viewMonth, setViewMonth] = useState(10);
 
   // 공부 전용 달력 데이터
   const [studyLogs, setStudyLogs] = useState<Record<string, StudyLog>>({});
@@ -57,12 +51,22 @@ export default function StudyPage() {
   const [isAddingSubject, setIsAddingSubject] = useState(false);
 
   useEffect(() => {
+    const now = new Date();
+    const tStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+      now.getDate()
+    ).padStart(2, "0")}`;
+
+    setTodayStr(tStr);
+    setSelectedDate(tStr);
+    setViewYear(now.getFullYear());
+    setViewMonth(now.getMonth());
+
     try {
       const savedStudy = localStorage.getItem("kwan_study_calendar_v1");
       if (savedStudy) {
         const parsed = JSON.parse(savedStudy);
         setStudyLogs(parsed);
-        if (parsed[todayStr]) setMemoInput(parsed[todayStr].memo || "");
+        if (parsed[tStr]) setMemoInput(parsed[tStr].memo || "");
       }
 
       const savedSubjects = localStorage.getItem("kwan_study_subjects_v1");
@@ -70,7 +74,7 @@ export default function StudyPage() {
     } catch {
       // 파싱 오류 무시
     }
-  }, [todayStr]);
+  }, []);
 
   const firstDay = new Date(viewYear, viewMonth, 1).getDay();
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
@@ -101,6 +105,7 @@ export default function StudyPage() {
 
   const handleSaveStudyLog = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedDate) return;
     const next = {
       ...studyLogs,
       [selectedDate]: {
@@ -113,6 +118,7 @@ export default function StudyPage() {
   };
 
   const handleDeleteStudyLog = () => {
+    if (!selectedDate) return;
     const next = { ...studyLogs };
     delete next[selectedDate];
     setStudyLogs(next);
@@ -242,8 +248,10 @@ export default function StudyPage() {
           {/* 선택한 날짜 공부 메모 */}
           <form onSubmit={handleSaveStudyLog} className="pt-2 border-t border-stone-100 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-extrabold text-stone-800">📌 {selectedDate} 공부 기록</span>
-              {studyLogs[selectedDate] && (
+              <span className="text-xs font-extrabold text-stone-800">
+                📌 {selectedDate || "오늘"} 공부 기록
+              </span>
+              {selectedDate && studyLogs[selectedDate] && (
                 <button
                   type="button"
                   onClick={handleDeleteStudyLog}
