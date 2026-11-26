@@ -5,7 +5,7 @@ import Link from "next/link";
 import StudyTimerBox from "../components/StudyTimerBox";
 import {
   DayTimeRecord,
-  getStudyDateAndSlot,
+  getStudyDateAndOffset,
   loadTimeRecords,
   loadGoalMinutes,
 } from "../utils/studyTime";
@@ -67,7 +67,7 @@ export default function StudyPage() {
 
   useEffect(() => {
     const now = new Date();
-    const { dStr } = getStudyDateAndSlot(now);
+    const { dStr } = getStudyDateAndOffset(now);
     setTodayStr(dStr);
     setSelectedDate(dStr);
     setViewYear(now.getFullYear());
