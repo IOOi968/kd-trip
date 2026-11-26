@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { supabase } from "../utils/supabase";
 
 interface StudyLog {
   date: string;
@@ -46,20 +45,18 @@ export default function StudyPage() {
   const [viewYear, setViewYear] = useState(new Date().getFullYear());
   const [viewMonth, setViewMonth] = useState(new Date().getMonth());
 
-  // 1. 공부 달력 데이터 & 연동된 운동 기록 데이터
+  // 공부 전용 달력 데이터
   const [studyLogs, setStudyLogs] = useState<Record<string, StudyLog>>({});
-  const [workoutDates, setWorkoutDates] = useState<Record<string, string>>({});
   const [memoInput, setMemoInput] = useState("");
 
-  // 2. 2x2 메뉴 선택 알림/모달 상태
+  // 2x2 메뉴 선택 상태
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
 
-  // 3. 하단 공부 과목 카드 (+ 추가 방식)
+  // 하단 공부 과목 카드 (+ 추가 방식)
   const [subjects, setSubjects] = useState<SubjectCard[]>([]);
   const [isAddingSubject, setIsAddingSubject] = useState(false);
 
   useEffect(() => {
-    // 공부 달력 기록 불러오기
     try {
       const savedStudy = localStorage.getItem("kwan_study_calendar_v1");
       if (savedStudy) {
@@ -73,23 +70,6 @@ export default function StudyPage() {
     } catch {
       // 파싱 오류 무시
     }
-
-    // 운동기록(Supabase workout_logs) 연동 조회
-    const loadLinkedWorkout = async () => {
-      try {
-        const { data } = await supabase.from("workout_logs").select("date, title, summary");
-        if (data) {
-          const map: Record<string, string> = {};
-          data.forEach((row) => {
-            map[row.date] = row.title || row.summary || "오운완 💪";
-          });
-          setWorkoutDates(map);
-        }
-      } catch {
-        // 연동 조회 실패 시 무시
-      }
-    };
-    loadLinkedWorkout();
   }, [todayStr]);
 
   const firstDay = new Date(viewYear, viewMonth, 1).getDay();
@@ -183,7 +163,7 @@ export default function StudyPage() {
       </header>
 
       <main className="max-w-md mx-auto px-4 pt-5 space-y-6">
-        {/* 1. 보기 좋은 크기의 통합 캘린더 */}
+        {/* 1. 공부 전용 캘린더 */}
         <section className="bg-white border border-stone-200 rounded-2xl p-4 shadow-sm space-y-3.5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -207,20 +187,7 @@ export default function StudyPage() {
             </div>
 
             <span className="text-xs font-bold bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full">
-              공부 {studyCount}일 🔥
-            </span>
-          </div>
-
-          {/* 연동 범례 표시 */}
-          <div className="flex items-center gap-3 text-[11px] font-semibold text-stone-500 px-1">
-            <span className="inline-flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" /> 공부
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-sky-500" /> 운동(연동)
-            </span>
-            <span className="inline-flex items-center gap-1 opacity-50">
-              <span className="w-2 h-2 rounded-full bg-amber-400" /> 일정(예정)
+              이번 달 {studyCount}일 공부 🔥
             </span>
           </div>
 
@@ -247,7 +214,6 @@ export default function StudyPage() {
                 day
               ).padStart(2, "0")}`;
               const hasStudy = !!studyLogs[dStr];
-              const hasWorkout = !!workoutDates[dStr];
               const isSelected = selectedDate === dStr;
               const isToday = dStr === todayStr;
 
@@ -256,66 +222,42 @@ export default function StudyPage() {
                   key={dStr}
                   type="button"
                   onClick={() => handleSelectDay(day)}
-                  className={`h-12 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 transition border ${
+                  className={`h-12 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-0.5 transition border ${
                     isSelected
                       ? "bg-stone-900 text-white border-stone-900 shadow-xs"
                       : hasStudy
-                      ? "bg-emerald-50 text-emerald-900 border-emerald-200"
+                      ? "bg-emerald-50 text-emerald-900 border-emerald-300"
                       : isToday
                       ? "bg-stone-100 text-stone-900 border-stone-300"
                       : "bg-white hover:bg-stone-50 text-stone-700 border-transparent"
                   }`}
                 >
                   <span>{day}</span>
-                  <div className="flex items-center gap-1 h-1.5">
-                    {hasStudy && (
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full ${
-                          isSelected ? "bg-emerald-400" : "bg-emerald-500"
-                        }`}
-                      />
-                    )}
-                    {hasWorkout && (
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full ${
-                          isSelected ? "bg-sky-400" : "bg-sky-500"
-                        }`}
-                      />
-                    )}
-                  </div>
+                  {hasStudy && <span className="text-[10px] leading-none">📚</span>}
                 </button>
               );
             })}
           </div>
 
-          {/* 선택한 날짜의 공부 & 연동된 운동 요약 */}
+          {/* 선택한 날짜 공부 메모 */}
           <form onSubmit={handleSaveStudyLog} className="pt-2 border-t border-stone-100 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-extrabold text-stone-800">📌 {selectedDate} 기록</span>
+              <span className="text-xs font-extrabold text-stone-800">📌 {selectedDate} 공부 기록</span>
               {studyLogs[selectedDate] && (
                 <button
                   type="button"
                   onClick={handleDeleteStudyLog}
                   className="text-[11px] font-bold text-rose-500"
                 >
-                  공부 삭제
+                  삭제
                 </button>
               )}
             </div>
 
-            {workoutDates[selectedDate] && (
-              <div className="text-[11px] font-bold bg-sky-50 text-sky-800 border border-sky-200 px-3 py-1.5 rounded-xl flex items-center justify-between">
-                <span>💪 운동 연동: {workoutDates[selectedDate]}</span>
-                <Link href="/workout" className="underline text-sky-600">
-                  보기 →
-                </Link>
-              </div>
-            )}
-
             <div className="flex gap-2">
               <input
                 type="text"
-                placeholder="오늘 공부 내용 한 줄 메모 (예: 전기자기학 2장 완료)"
+                placeholder="오늘 공부한 내용 한 줄 기록 (예: 전기자기학 2장 완료)"
                 value={memoInput}
                 onChange={(e) => setMemoInput(e.target.value)}
                 className="flex-1 px-3 py-2 text-xs border border-stone-200 rounded-xl bg-stone-50 focus:bg-white focus:outline-none"
