@@ -50,9 +50,10 @@ export default function StudyPage() {
   const [studyLogs, setStudyLogs] = useState<Record<string, StudyLog>>({});
   const [memoInput, setMemoInput] = useState("");
 
-  // 학습 도구 (+ 추가 방식: 퀴즈 / 저장 / 설정 / 스터디플래너)
+  // 학습 도구 (+ 추가 및 수정 모드 토글)
   const [tools, setTools] = useState<ToolCard[]>([]);
   const [isAddingTool, setIsAddingTool] = useState(false);
+  const [isEditingTools, setIsEditingTools] = useState(false);
   const [activeTool, setActiveTool] = useState<string | null>(null);
 
   // 하단 공부 과목 카드 (+ 추가 방식)
@@ -154,8 +155,10 @@ export default function StudyPage() {
     e.preventDefault();
     e.stopPropagation();
     if (confirm("이 학습 도구를 삭제할까요?")) {
-      saveTools(tools.filter((t) => t.id !== id));
+      const next = tools.filter((t) => t.id !== id);
+      saveTools(next);
       if (activeTool === id) setActiveTool(null);
+      if (next.length === 0) setIsEditingTools(false);
     }
   };
 
@@ -314,11 +317,26 @@ export default function StudyPage() {
           </form>
         </section>
 
-        {/* 2. 학습 도구 (+ 추가 방식: 퀴즈 / 저장 / 설정 / 스터디플래너) */}
+        {/* 2. 학습 도구 (+ 추가 및 수정 버튼 눌렀을 때만 x 표시) */}
         <section className="space-y-2.5">
-          <h2 className="text-xs font-bold text-stone-600 px-1">
-            학습 도구 ({tools.length}/4)
-          </h2>
+          <div className="flex items-center justify-between px-1">
+            <h2 className="text-xs font-bold text-stone-600">
+              학습 도구 ({tools.length}/4)
+            </h2>
+            {tools.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setIsEditingTools(!isEditingTools)}
+                className={`text-[11px] font-bold px-2 py-0.5 rounded-md border transition ${
+                  isEditingTools
+                    ? "bg-stone-900 text-white border-stone-900"
+                    : "bg-white text-stone-500 border-stone-200 hover:bg-stone-100"
+                }`}
+              >
+                {isEditingTools ? "완료" : "수정"}
+              </button>
+            )}
+          </div>
 
           <div className="grid grid-cols-2 gap-2.5">
             {tools.map((tool) => (
@@ -327,14 +345,16 @@ export default function StudyPage() {
                 onClick={() => setActiveTool(activeTool === tool.id ? null : tool.id)}
                 className={`relative h-20 rounded-2xl border px-4 py-3 flex items-center justify-between text-left shadow-xs hover:scale-[1.01] transition cursor-pointer ${tool.color}`}
               >
-                <button
-                  type="button"
-                  onClick={(e) => handleDeleteTool(e, tool.id)}
-                  className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-white/80 text-[10px] text-stone-400 hover:text-rose-600 flex items-center justify-center"
-                  aria-label="삭제"
-                >
-                  ✕
-                </button>
+                {isEditingTools && (
+                  <button
+                    type="button"
+                    onClick={(e) => handleDeleteTool(e, tool.id)}
+                    className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-white/90 text-[10px] text-rose-500 hover:bg-rose-500 hover:text-white shadow-2xs flex items-center justify-center transition"
+                    aria-label="삭제"
+                  >
+                    ✕
+                  </button>
+                )}
                 <div className="pr-2">
                   <p className="text-sm font-extrabold">{tool.title}</p>
                   <p className="text-[11px] opacity-75 mt-0.5">{tool.desc}</p>
