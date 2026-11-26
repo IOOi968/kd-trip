@@ -54,7 +54,6 @@ export default function ElectricalEngineerPage() {
   const [examGroups, setExamGroups] = useState<ExamGroup[]>([]);
   const [openExams, setOpenExams] = useState<Record<string, boolean>>({});
 
-  // 3개 메인 섹션 아코디언 토글 상태 (기본 접힘 -> 삼각형 눌러서 열고 닫기)
   const [isScoreBoxOpen, setIsScoreBoxOpen] = useState(false);
   const [isHistoryBoxOpen, setIsHistoryBoxOpen] = useState(false);
 
@@ -186,7 +185,6 @@ export default function ElectricalEngineerPage() {
 
   return (
     <div className="min-h-screen bg-stone-50 text-stone-800 pb-20">
-      {/* 상단 고정 헤더 */}
       <header className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-stone-200 px-4 py-3.5">
         <div className="max-w-md mx-auto flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -205,7 +203,7 @@ export default function ElectricalEngineerPage() {
       </header>
 
       <main className="max-w-md mx-auto px-4 pt-5 space-y-4">
-        {/* 1. 기출 회차 점수 · 오답 기록 박스 (기존 디자인 그대로 + 삼각형 열고 닫기) */}
+        {/* 1. 기출 회차 점수 · 오답 기록 박스 */}
         <section className="bg-white border border-stone-200 rounded-2xl p-4 shadow-sm space-y-3.5">
           <div
             onClick={() => setIsScoreBoxOpen(!isScoreBoxOpen)}
@@ -226,7 +224,6 @@ export default function ElectricalEngineerPage() {
 
           {isScoreBoxOpen && (
             <form onSubmit={handleSaveAttempt} className="space-y-3.5 pt-1">
-              {/* 시험 이름 입력 박스 */}
               <div className="space-y-1">
                 <label className="block text-[11px] font-bold text-stone-600">시험 이름</label>
                 <input
@@ -239,7 +236,6 @@ export default function ElectricalEngineerPage() {
                 />
               </div>
 
-              {/* 점수 넣는 박스 */}
               <div className="space-y-1">
                 <label className="block text-[11px] font-bold text-stone-600">점수 기록</label>
                 <div className="grid grid-cols-4 gap-1.5">
@@ -289,7 +285,6 @@ export default function ElectricalEngineerPage() {
                 </div>
               </div>
 
-              {/* 틀린 번호 입력 박스 */}
               <div className="space-y-1.5">
                 <label className="block text-[11px] font-bold text-stone-600">
                   틀린 번호 (쉼표 또는 띄어쓰기로 구분)
@@ -343,8 +338,8 @@ export default function ElectricalEngineerPage() {
           )}
         </section>
 
-        {/* 2. 누적 회차 기록 박스 (위 박스와 동일한 글자 크기·박스형 디자인 + 삼각형 토글) */}
-        <section className="bg-white border border-stone-200 rounded-2xl p-4 shadow-sm space-y-3.5">
+        {/* 2. 누적 회차 기록 박스 (박스 안에 중첩 박스 없이 얇은 가로 구분선만 적용) */}
+        <section className="bg-white border border-stone-200 rounded-2xl p-4 shadow-sm space-y-3">
           <div
             onClick={() => setIsHistoryBoxOpen(!isHistoryBoxOpen)}
             className="flex items-center justify-between cursor-pointer select-none"
@@ -361,25 +356,22 @@ export default function ElectricalEngineerPage() {
           </div>
 
           {isHistoryBoxOpen && (
-            <div className="pt-1">
+            <div className="border-t border-stone-200 pt-1">
               {examGroups.length === 0 ? (
-                <div className="bg-stone-50 border border-dashed border-stone-300 rounded-xl p-6 text-center text-xs text-stone-400">
+                <p className="py-6 text-center text-xs text-stone-400">
                   아직 저장된 시험 회차가 없습니다.
-                </div>
+                </p>
               ) : (
-                <div className="space-y-2.5">
+                <div className="divide-y divide-stone-200">
                   {examGroups.map((group) => {
                     const isOpen = !!openExams[group.examName];
                     const latest = group.attempts[group.attempts.length - 1];
 
                     return (
-                      <div
-                        key={group.examName}
-                        className="bg-white border border-stone-200 rounded-2xl overflow-hidden shadow-2xs"
-                      >
+                      <div key={group.examName} className="py-3">
                         <div
                           onClick={() => toggleOpen(group.examName)}
-                          className="px-4 py-3.5 flex items-center justify-between cursor-pointer hover:bg-stone-50 transition"
+                          className="flex items-center justify-between cursor-pointer hover:opacity-80 transition"
                         >
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-xs font-extrabold text-amber-600">
@@ -413,12 +405,9 @@ export default function ElectricalEngineerPage() {
                         </div>
 
                         {isOpen && (
-                          <div className="px-4 pb-4 pt-2 border-t border-stone-100 bg-stone-50/70 space-y-2">
+                          <div className="mt-2.5 pt-2 border-t border-dashed border-stone-200 divide-y divide-stone-100">
                             {group.attempts.map((att) => (
-                              <div
-                                key={att.id}
-                                className="bg-white border border-stone-200 rounded-xl p-3 space-y-2"
-                              >
+                              <div key={att.id} className="py-2.5 space-y-2">
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-1.5">
                                     <span
@@ -503,7 +492,7 @@ export default function ElectricalEngineerPage() {
           )}
         </section>
 
-        {/* 3. 단답 기록 박스 (스크린샷 AI 글자 추출 + 문제 + 정답 + 단답 기록 버튼) */}
+        {/* 3. 단답 문제 등록 + 4. 누적 단답 기록 */}
         <ShortAnswerBox todayStr={todayStr} />
       </main>
     </div>
