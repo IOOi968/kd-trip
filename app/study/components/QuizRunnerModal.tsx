@@ -5,6 +5,7 @@ import React, { useState } from "react";
 export interface ShortAnswerItem {
   id: number;
   question: string;
+  imageDataUrl?: string;
   answer: string;
   date: string;
   wrongCount?: number;
@@ -84,7 +85,7 @@ export default function QuizRunnerModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-sm bg-white/95 backdrop-blur border border-stone-200 rounded-2xl p-5 shadow-xl space-y-4"
+        className="w-full max-w-sm bg-white/95 backdrop-blur border border-stone-200 rounded-2xl p-5 shadow-xl space-y-4 max-h-[88vh] overflow-y-auto"
       >
         {/* 1. 문제 수 설정 화면 (10 / 20 / 전체) */}
         {step === "setup" && (
@@ -141,7 +142,7 @@ export default function QuizRunnerModal({
           </>
         )}
 
-        {/* 2. 한 문제씩 랜덤 출제 & 맞음/틀림 버튼 채점 화면 */}
+        {/* 2. 한 문제씩 랜덤 출제 (스크린샷 이미지 + 텍스트 모두 지원) */}
         {step === "playing" && currentItem && (
           <>
             <div className="flex items-center justify-between">
@@ -157,8 +158,7 @@ export default function QuizRunnerModal({
               </button>
             </div>
 
-            {/* 문제 박스 */}
-            <div className="bg-stone-50 border border-stone-200 rounded-xl p-4 min-h-[110px] flex flex-col justify-between space-y-3">
+            <div className="bg-stone-50 border border-stone-200 rounded-xl p-3.5 min-h-[110px] flex flex-col justify-between space-y-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-extrabold text-stone-400">QUESTION</span>
                 {(currentItem.wrongCount || 0) > 0 && (
@@ -167,12 +167,22 @@ export default function QuizRunnerModal({
                   </span>
                 )}
               </div>
-              <p className="text-sm font-extrabold text-stone-900 whitespace-pre-line leading-relaxed">
-                {currentItem.question}
-              </p>
+
+              {currentItem.imageDataUrl && (
+                <img
+                  src={currentItem.imageDataUrl}
+                  alt="퀴즈 문제 스크린샷"
+                  className="w-full max-h-60 object-contain rounded-lg border border-stone-200 bg-white"
+                />
+              )}
+
+              {currentItem.question && (
+                <p className="text-sm font-extrabold text-stone-900 whitespace-pre-line leading-relaxed">
+                  {currentItem.question}
+                </p>
+              )}
             </div>
 
-            {/* 정답 확인 전 vs 정답 확인 후 맞음/틀림 버튼 */}
             {!showAnswer ? (
               <button
                 type="button"
