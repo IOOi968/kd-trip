@@ -15,6 +15,7 @@ const AVAILABLE_CATEGORIES: Omit<CategoryCard, "id">[] = [
   { name: "여행", icon: "✈️", href: "/trip", color: "bg-rose-50 border-rose-200 text-rose-900" },
   { name: "운동", icon: "💪", href: "/workout", color: "bg-sky-50 border-sky-200 text-sky-900" },
   { name: "해야 할 일", icon: "✅", href: "/todo", color: "bg-amber-50 border-amber-200 text-amber-900" },
+  { name: "공부", icon: "📚", href: "/study", color: "bg-emerald-50 border-emerald-200 text-emerald-900" },
 ];
 
 export default function MainDashboard() {
