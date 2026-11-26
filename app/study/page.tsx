@@ -43,15 +43,6 @@ const AVAILABLE_SUBJECTS: Omit<SubjectCard, "id">[] = [
   },
 ];
 
-function formatDuration(sec: number) {
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = sec % 60;
-  if (h > 0) return `${h}시간 ${m}분`;
-  if (m > 0) return `${m}분 ${s}초`;
-  return `${s}초`;
-}
-
 export default function StudyPage() {
   const [todayStr, setTodayStr] = useState("");
   const [selectedDate, setSelectedDate] = useState("");
@@ -111,10 +102,7 @@ export default function StudyPage() {
     ([d, r]) => d.startsWith(monthPrefix) && r.seconds > 0
   ).length;
 
-  const selectedSec = selectedDate ? timeRecords[selectedDate]?.seconds || 0 : 0;
   const goalSec = goalMinutes * 60;
-  const fillPct = Math.min(100, Math.round((selectedSec / goalSec) * 100));
-  const blockCount = Math.max(1, Math.min(12, Math.round(goalMinutes / 60)));
 
   return (
     <div className="min-h-screen bg-stone-50 text-stone-800 pb-20">
@@ -133,7 +121,7 @@ export default function StudyPage() {
       </header>
 
       <main className="max-w-md mx-auto px-4 pt-5 space-y-5">
-        {/* 1. 공부 달력 & 목표 시간 기준 등분 네모 게이지 */}
+        {/* 1. 공부 달력 (날짜 칸 자체가 목표 시간 대비 분 단위로 아래에서 위로 차오름) */}
         <section className="bg-white border border-stone-200 rounded-2xl p-4 shadow-sm space-y-3.5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -176,7 +164,9 @@ export default function StudyPage() {
               const day = idx + 1;
               const dStr = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
               const daySec = timeRecords[dStr]?.seconds || 0;
-              const dayPct = Math.min(100, Math.round((daySec / goalSec) * 100));
+              // 분 간격으로 정밀하게 아래에서 위로 차오르는 비율 계산
+              const dayMinutes = Math.floor(daySec / 60);
+              const fillPct = Math.min(100, (dayMinutes / goalMinutes) * 100);
               const isSelected = selectedDate === dStr;
 
               return (
@@ -184,54 +174,29 @@ export default function StudyPage() {
                   key={dStr}
                   type="button"
                   onClick={() => setSelectedDate(dStr)}
-                  className={`relative h-12 rounded-xl text-xs font-bold flex items-center justify-center overflow-hidden border ${
+                  className={`relative h-12 rounded-xl text-xs font-extrabold flex items-center justify-center overflow-hidden transition border ${
                     isSelected
-                      ? "bg-stone-900 text-white border-stone-900"
+                      ? "bg-emerald-50/40 text-stone-900 border-2 border-emerald-600 shadow-xs"
                       : daySec > 0
-                      ? "bg-emerald-50/50 text-emerald-950 border-emerald-300"
+                      ? "bg-stone-50 text-stone-900 border-emerald-200"
                       : dStr === todayStr
-                      ? "bg-stone-100 border-stone-300"
-                      : "bg-white border-transparent"
+                      ? "bg-stone-100 text-stone-800 border-stone-300"
+                      : "bg-white hover:bg-stone-50 text-stone-700 border-transparent"
                   }`}
                 >
-                  {!isSelected && dayPct > 0 && (
+                  {/* 목표 공부 시간 대비 아래에서부터 위로 차오르는 초록 게이지 */}
+                  {fillPct > 0 && (
                     <span
-                      style={{ height: `${dayPct}%` }}
-                      className="absolute bottom-0 left-0 right-0 bg-emerald-200/70 pointer-events-none"
+                      style={{ height: `${fillPct}%` }}
+                      className={`absolute bottom-0 left-0 right-0 pointer-events-none transition-all duration-300 ${
+                        isSelected ? "bg-emerald-400/75" : "bg-emerald-300/70"
+                      }`}
                     />
                   )}
                   <span className="relative z-10">{day}</span>
                 </button>
               );
             })}
-          </div>
-
-          {/* 목표 공부량 기준 등분 네모칸 게이지 */}
-          <div className="pt-3 border-t border-stone-100 space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-extrabold text-stone-800">
-                📌 {selectedDate || "오늘"} ({fillPct}%)
-              </span>
-              <span className="font-bold text-emerald-700">
-                {formatDuration(selectedSec)} / 목표 {Math.round((goalMinutes / 60) * 10) / 10}시간
-              </span>
-            </div>
-
-            <div
-              style={{ gridTemplateColumns: `repeat(${blockCount}, minmax(0, 1fr))` }}
-              className="grid gap-1.5 h-7 bg-stone-100 p-1 rounded-xl border border-stone-200"
-            >
-              {Array.from({ length: blockCount }).map((_, idx) => {
-                const start = (idx / blockCount) * 100;
-                const end = ((idx + 1) / blockCount) * 100;
-                const fill = Math.max(0, Math.min(100, ((fillPct - start) / (end - start)) * 100));
-                return (
-                  <div key={idx} className="h-full bg-white rounded-md border border-stone-200 overflow-hidden">
-                    <div style={{ width: `${fill}%` }} className="h-full bg-emerald-500 transition-all" />
-                  </div>
-                );
-              })}
-            </div>
           </div>
         </section>
 
@@ -326,7 +291,7 @@ export default function StudyPage() {
           )}
         </section>
 
-        {/* 4. 나의 공부 과목 (수정 버튼 누를 때만 X 표시) */}
+        {/* 4. 나의 공부 과목 */}
         <section className="space-y-2.5">
           <div className="flex items-center justify-between px-1">
             <h2 className="text-xs font-bold text-stone-600">나의 공부 과목 ({subjects.length})</h2>
