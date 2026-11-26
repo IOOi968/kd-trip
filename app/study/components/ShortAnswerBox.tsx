@@ -2,22 +2,24 @@
 
 import React, { useState, useEffect } from "react";
 
-interface ShortAnswerItem {
+export interface ShortAnswerItem {
   id: number;
   question: string;
+  imageDataUrl?: string; // 문제 스크린샷 이미지 (Data URL)
   answer: string;
   date: string;
+  wrongCount?: number;
 }
 
 const SHORT_KEY = "kwan_study_ee_short_answers_v1";
 
-function compressImage(file: File): Promise<string> {
+function compressToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
       URL.revokeObjectURL(url);
-      const maxW = 1000;
+      const maxW = 800;
       const scale = img.width > maxW ? maxW / img.width : 1;
       const canvas = document.createElement("canvas");
       canvas.width = Math.round(img.width * scale);
@@ -25,8 +27,7 @@ function compressImage(file: File): Promise<string> {
       const ctx = canvas.getContext("2d");
       if (!ctx) return reject(new Error("이미지 처리 실패"));
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-      resolve(dataUrl.split(",")[1]);
+      resolve(canvas.toDataURL("image/jpeg", 0.78));
     };
     img.onerror = () => reject(new Error("이미지 로드 실패"));
     img.src = url;
@@ -39,8 +40,8 @@ export default function ShortAnswerBox({ todayStr }: { todayStr: string }) {
 
   const [items, setItems] = useState<ShortAnswerItem[]>([]);
   const [question, setQuestion] = useState("");
+  const [imageDataUrl, setImageDataUrl] = useState<string>("");
   const [answer, setAnswer] = useState("");
-  const [isExtracting, setIsExtracting] = useState(false);
   const [revealedIds, setRevealedIds] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
@@ -53,49 +54,48 @@ export default function ShortAnswerBox({ todayStr }: { todayStr: string }) {
   }, []);
 
   const saveItems = (next: ShortAnswerItem[]) => {
-    setItems(next);
-    localStorage.setItem(SHORT_KEY, JSON.stringify(next));
+    try {
+      localStorage.setItem(SHORT_KEY, JSON.stringify(next));
+      setItems(next);
+    } catch {
+      alert("저장 공간이 부족합니다. 오래된 스크린샷 문제를 일부 삭제한 뒤 다시 시도해 주세요.");
+    }
   };
 
+  // 스크린샷 업로드 시 문제 내용에 이미지 그대로 첨부
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setIsExtracting(true);
     try {
-      const base64 = await compressImage(file);
-      const res = await fetch("/api/study-ocr", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageBase64: base64, mimeType: "image/jpeg" }),
-      });
-      const data = await res.json();
-      if (!res.ok || data.error) {
-        alert(data.error || "글자 분석 중 오류가 발생했습니다.");
-        return;
-      }
-      if (data.question) setQuestion(data.question);
-      if (data.answer) setAnswer(data.answer);
+      const dataUrl = await compressToDataUrl(file);
+      setImageDataUrl(dataUrl);
     } catch {
-      alert("스크린샷 분석 중 오류가 발생했습니다.");
+      alert("스크린샷을 불러오는 중 오류가 발생했습니다.");
     } finally {
-      setIsExtracting(false);
       e.target.value = "";
     }
   };
 
   const handleAddShortAnswer = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!question.trim() && !answer.trim()) return;
+    if (!question.trim() && !imageDataUrl) {
+      return alert("문제 내용을 입력하거나 스크린샷을 올려주세요.");
+    }
+    if (!answer.trim()) {
+      return alert("정답을 입력해 주세요.");
+    }
 
     const newItem: ShortAnswerItem = {
       id: Date.now(),
       question: question.trim(),
+      imageDataUrl: imageDataUrl || undefined,
       answer: answer.trim(),
       date: todayStr,
     };
     saveItems([newItem, ...items]);
     setQuestion("");
+    setImageDataUrl("");
     setAnswer("");
     setIsHistoryOpen(true);
   };
@@ -112,7 +112,7 @@ export default function ShortAnswerBox({ todayStr }: { todayStr: string }) {
 
   return (
     <>
-      {/* 1. 단답 문제 등록 박스 */}
+      {/* 1. 단답 문제 등록 박스 (스크린샷 그대로 첨부 + 수기 정답 입력) */}
       <section className="bg-white border border-stone-200 rounded-2xl p-4 shadow-sm space-y-3.5">
         <div
           onClick={() => setIsRegisterOpen(!isRegisterOpen)}
@@ -128,38 +128,57 @@ export default function ShortAnswerBox({ todayStr }: { todayStr: string }) {
 
         {isRegisterOpen && (
           <form onSubmit={handleAddShortAnswer} className="space-y-3 pt-1">
-            <label className="block w-full py-2.5 px-3 bg-amber-50/70 hover:bg-amber-100/70 border border-dashed border-amber-300 rounded-xl text-center cursor-pointer transition">
-              <span className="text-xs font-extrabold text-amber-900">
-                {isExtracting
-                  ? "⏳ AI가 스크린샷 글자를 분석 중입니다..."
-                  : "📸 스크린샷 첨부 (AI 자동 글자 추출)"}
-              </span>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                disabled={isExtracting}
-                className="hidden"
-              />
-            </label>
+            {/* 문제 내용 박스 (스크린샷 올리기 + 선택적 텍스트 입력 통합) */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-[11px] font-bold text-stone-600">문제 내용</label>
+                <label className="text-[11px] font-extrabold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 px-2.5 py-1 rounded-lg cursor-pointer transition">
+                  📸 스크린샷 올리기
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
+                </label>
+              </div>
 
-            <div className="space-y-1">
-              <label className="block text-[11px] font-bold text-stone-600">문제 내용</label>
+              {imageDataUrl && (
+                <div className="relative rounded-xl overflow-hidden border border-stone-200 bg-stone-50">
+                  <img
+                    src={imageDataUrl}
+                    alt="첨부된 문제 스크린샷"
+                    className="w-full max-h-64 object-contain mx-auto"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setImageDataUrl("")}
+                    className="absolute top-2 right-2 bg-stone-900/75 text-white text-[10px] font-bold px-2 py-1 rounded-lg"
+                  >
+                    사진 삭제 ✕
+                  </button>
+                </div>
+              )}
+
               <textarea
                 rows={3}
-                placeholder="단답형 문제 내용을 입력하거나 위에서 스크린샷을 올려주세요"
+                placeholder={
+                  imageDataUrl
+                    ? "추가 메모가 있으면 입력하세요 (사진만으로도 등록 가능)"
+                    : "단답형 문제 내용을 입력하거나 위 버튼으로 스크린샷을 올려주세요"
+                }
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
                 className="w-full p-2.5 text-xs leading-relaxed border border-stone-200 rounded-xl bg-stone-50 focus:bg-white focus:outline-none"
-                required
               />
             </div>
 
+            {/* 정답 수기 입력 박스 */}
             <div className="space-y-1">
               <label className="block text-[11px] font-bold text-stone-600">정답</label>
               <textarea
                 rows={2}
-                placeholder="정답을 입력하세요"
+                placeholder="정답을 직접 입력하세요"
                 value={answer}
                 onChange={(e) => setAnswer(e.target.value)}
                 className="w-full p-2.5 text-xs font-bold leading-relaxed border border-stone-200 rounded-xl bg-stone-50 focus:bg-white focus:outline-none"
@@ -177,7 +196,7 @@ export default function ShortAnswerBox({ todayStr }: { todayStr: string }) {
         )}
       </section>
 
-      {/* 2. 누적 단답 기록 박스 (박스 안에 겹박스 없이 얇은 구분선만 적용) */}
+      {/* 2. 누적 단답 기록 박스 (스크린샷 문제 + 텍스트 문제 모두 표시) */}
       <section className="bg-white border border-stone-200 rounded-2xl p-4 shadow-sm space-y-3">
         <div
           onClick={() => setIsHistoryOpen(!isHistoryOpen)}
@@ -220,9 +239,19 @@ export default function ShortAnswerBox({ todayStr }: { todayStr: string }) {
                         </button>
                       </div>
 
-                      <p className="text-xs font-bold text-stone-800 whitespace-pre-line leading-relaxed">
-                        {item.question}
-                      </p>
+                      {item.imageDataUrl && (
+                        <img
+                          src={item.imageDataUrl}
+                          alt="문제 스크린샷"
+                          className="w-full max-h-64 object-contain rounded-xl border border-stone-200 bg-stone-50"
+                        />
+                      )}
+
+                      {item.question && (
+                        <p className="text-xs font-bold text-stone-800 whitespace-pre-line leading-relaxed">
+                          {item.question}
+                        </p>
+                      )}
 
                       <div>
                         <button
